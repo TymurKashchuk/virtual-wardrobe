@@ -1,4 +1,5 @@
 using Wardrobe.Api.Services;
+using Wardrobe.Application;
 using Wardrobe.Application.Common.Interfaces;
 using Wardrobe.Infrastructure;
 
@@ -7,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
+builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
 builder.Services.AddOpenApi();
