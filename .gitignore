@@ -37,3 +37,4 @@ coverage/
 docker-data/
 uploads/
 temp/
+storage/

@@ -26,6 +26,9 @@ public static class DependencyInjection
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IEmailSenderService, EmailSenderService>();
 
+        services.AddSingleton<IFileStorageService, LocalFileStorageService>();
+        services.AddSingleton<IImageProcessorService, SkiaImageProcessorService>();
+
         return services;
     }
 }
