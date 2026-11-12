@@ -1,0 +1,53 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore apps/api/Wardrobe.sln
+
+      - name: Build solution
+        run: dotnet build apps/api/Wardrobe.sln --configuration Release --no-restore
+
+      - name: Run tests
+        run: dotnet test apps/api/Wardrobe.sln --configuration Release --no-build
+
+  frontend:
+    name: Frontend (React & TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: 'apps/web/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci --prefix apps/web
+
+      - name: Build and typecheck
+        run: npm run build --prefix apps/web
