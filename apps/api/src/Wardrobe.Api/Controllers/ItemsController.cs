@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wardrobe.Application.Common.Interfaces;
 using Wardrobe.Application.Items.Models;
+using Wardrobe.Application.Outfits.Models;
 using Wardrobe.Domain.Enums;
 
 namespace Wardrobe.Api.Controllers;
@@ -13,17 +14,20 @@ namespace Wardrobe.Api.Controllers;
 public class ItemsController : ControllerBase
 {
     private readonly IItemService _itemService;
+    private readonly IOutfitService _outfitService;
     private readonly IFileStorageService _fileStorage;
     private readonly ICurrentUserService _currentUserService;
     private readonly IValidator<CreateItemRequest> _createValidator;
 
     public ItemsController(
         IItemService itemService,
+        IOutfitService outfitService,
         IFileStorageService fileStorage,
         ICurrentUserService currentUserService,
         IValidator<CreateItemRequest> createValidator)
     {
         _itemService = itemService;
+        _outfitService = outfitService;
         _fileStorage = fileStorage;
         _currentUserService = currentUserService;
         _createValidator = createValidator;
@@ -114,6 +118,23 @@ public class ItemsController : ControllerBase
         }
 
         return Ok(item);
+    }
+
+    [HttpGet("{id:guid}/outfits")]
+    [ProducesResponseType(typeof(IReadOnlyList<OutfitSummaryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetItemOutfits(
+        Guid id, 
+        CancellationToken cancellationToken)
+    {
+        var userId = _currentUserService.UserId;
+        if (userId == null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _outfitService.GetOutfitsByItemIdAsync(userId.Value, id, cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}/photo")]
