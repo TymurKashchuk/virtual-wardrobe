@@ -16,6 +16,10 @@ builder.Services.AddInfrastructureServices(builder.Configuration);
 
 var jwtSecret = builder.Configuration["Jwt:Secret"] 
     ?? throw new InvalidOperationException("Jwt:Secret is not configured.");
+if (Encoding.UTF8.GetByteCount(jwtSecret) < 32)
+{
+    throw new InvalidOperationException("Jwt:Secret must be at least 32 bytes (256 bits) long.");
+}
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "WardrobeApi";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "WardrobeClients";
 
