@@ -5,12 +5,18 @@ namespace Wardrobe.Infrastructure.Services;
 
 public class LocalFileStorageService : IFileStorageService
 {
+    private static readonly StringComparison PathComparison =
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
     private readonly string _basePath;
 
     public LocalFileStorageService(IConfiguration configuration)
     {
         var configuredPath = configuration["Storage:BasePath"] ?? "storage";
-        _basePath = Path.GetFullPath(configuredPath);
+        var fullBasePath = Path.GetFullPath(configuredPath);
+        _basePath = Path.EndsInDirectorySeparator(fullBasePath)
+            ? fullBasePath
+            : fullBasePath + Path.DirectorySeparatorChar;
 
         if (!Directory.Exists(_basePath))
         {
@@ -23,10 +29,7 @@ public class LocalFileStorageService : IFileStorageService
         byte[] content, 
         CancellationToken cancellationToken = default)
     {
-        var safeRelativePath = relativePath.TrimStart('/', '\\').Replace('\\', '/');
-        var fullPath = Path.GetFullPath(Path.Combine(_basePath, safeRelativePath));
-
-        EnsurePathIsInsideBase(fullPath);
+        var (safeRelativePath, fullPath) = ResolveSafePath(relativePath);
 
         var directory = Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
@@ -41,10 +44,7 @@ public class LocalFileStorageService : IFileStorageService
 
     public Task<Stream?> GetFileAsync(string fileKey, CancellationToken cancellationToken = default)
     {
-        var safeRelativePath = fileKey.TrimStart('/', '\\').Replace('\\', '/');
-        var fullPath = Path.GetFullPath(Path.Combine(_basePath, safeRelativePath));
-
-        EnsurePathIsInsideBase(fullPath);
+        var (_, fullPath) = ResolveSafePath(fileKey);
 
         if (!File.Exists(fullPath))
         {
@@ -64,10 +64,7 @@ public class LocalFileStorageService : IFileStorageService
 
     public Task DeleteFileAsync(string fileKey, CancellationToken cancellationToken = default)
     {
-        var safeRelativePath = fileKey.TrimStart('/', '\\').Replace('\\', '/');
-        var fullPath = Path.GetFullPath(Path.Combine(_basePath, safeRelativePath));
-
-        EnsurePathIsInsideBase(fullPath);
+        var (_, fullPath) = ResolveSafePath(fileKey);
 
         if (File.Exists(fullPath))
         {
@@ -77,9 +74,28 @@ public class LocalFileStorageService : IFileStorageService
         return Task.CompletedTask;
     }
 
+    private (string SafeRelativePath, string FullPath) ResolveSafePath(string fileKey)
+    {
+        if (string.IsNullOrWhiteSpace(fileKey) || fileKey.IndexOf('\0') >= 0)
+        {
+            throw new InvalidOperationException("Invalid file key.");
+        }
+
+        var safeRelativePath = fileKey.TrimStart('/', '\\').Replace('\\', '/');
+        if (string.IsNullOrWhiteSpace(safeRelativePath) || Path.IsPathRooted(safeRelativePath))
+        {
+            throw new InvalidOperationException("Access outside of storage directory is denied.");
+        }
+
+        var fullPath = Path.GetFullPath(Path.Combine(_basePath, safeRelativePath));
+        EnsurePathIsInsideBase(fullPath);
+
+        return (safeRelativePath, fullPath);
+    }
+
     private void EnsurePathIsInsideBase(string fullPath)
     {
-        if (!fullPath.StartsWith(_basePath, StringComparison.OrdinalIgnoreCase))
+        if (!fullPath.StartsWith(_basePath, PathComparison))
         {
             throw new InvalidOperationException("Access outside of storage directory is denied.");
         }
