@@ -53,6 +53,8 @@ public class LocalFileStorageServiceTests : IDisposable
     [InlineData("items/../../secret.txt")]
     [InlineData("../storage_evil/secret.txt")]
     [InlineData(@"..\storage_evil\secret.txt")]
+    [InlineData("/etc/passwd")]
+    [InlineData(@"\Windows\win.ini")]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("items/\0bad.webp")]

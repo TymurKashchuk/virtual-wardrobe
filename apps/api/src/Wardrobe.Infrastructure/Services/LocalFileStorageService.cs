@@ -81,7 +81,12 @@ public class LocalFileStorageService : IFileStorageService
             throw new InvalidOperationException("Invalid file key.");
         }
 
-        var safeRelativePath = fileKey.TrimStart('/', '\\').Replace('\\', '/');
+        if (Path.IsPathRooted(fileKey) || fileKey.StartsWith('/') || fileKey.StartsWith('\\'))
+        {
+            throw new InvalidOperationException("Access outside of storage directory is denied.");
+        }
+
+        var safeRelativePath = fileKey.Replace('\\', '/');
         if (string.IsNullOrWhiteSpace(safeRelativePath) || Path.IsPathRooted(safeRelativePath))
         {
             throw new InvalidOperationException("Access outside of storage directory is denied.");
