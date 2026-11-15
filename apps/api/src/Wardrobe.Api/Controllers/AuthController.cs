@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Wardrobe.Application.Auth.Models;
 using Wardrobe.Application.Common.Exceptions;
 using Wardrobe.Application.Common.Interfaces;
@@ -32,6 +33,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
+    [EnableRateLimiting("auth-strict")]
     public async Task<IActionResult> Register(
         [FromBody] RegisterRequest request, 
         CancellationToken cancellationToken)
@@ -58,6 +60,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("confirm-email")]
+    [EnableRateLimiting("auth-strict")]
     public async Task<IActionResult> ConfirmEmail(
         [FromBody] ConfirmEmailRequest request, 
         CancellationToken cancellationToken)
@@ -79,6 +82,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("auth-strict")]
     public async Task<IActionResult> Login(
         [FromBody] LoginRequest request, 
         CancellationToken cancellationToken)
@@ -122,6 +126,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("refresh")]
+    [EnableRateLimiting("auth-refresh")]
     public async Task<IActionResult> Refresh(CancellationToken cancellationToken)
     {
         var token = await ExtractRefreshTokenAsync(cancellationToken);
@@ -153,6 +158,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("logout")]
+    [EnableRateLimiting("auth-refresh")]
     public async Task<IActionResult> Logout(CancellationToken cancellationToken)
     {
         var token = await ExtractRefreshTokenAsync(cancellationToken);

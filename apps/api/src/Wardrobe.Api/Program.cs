@@ -1,5 +1,7 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Wardrobe.Api.Services;
 using Wardrobe.Application;
@@ -62,6 +64,26 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter =
+                ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString();
+        }
+
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new { message = "Too many requests. Please try again later." },
+            cancellationToken);
+    };
+
+    options.AddPolicy("auth-strict", httpContext => CreateIpSlidingPartition(httpContext, permitLimit: 10));
+    options.AddPolicy("auth-refresh", httpContext => CreateIpSlidingPartition(httpContext, permitLimit: 30));
+});
+
 builder.Services.AddProblemDetails();
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
@@ -90,6 +112,7 @@ app.Use(async (context, next) =>
 app.UseHttpsRedirection();
 
 app.UseCors("FrontendPolicy");
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -100,3 +123,18 @@ app.MapGet("/api/health", () => Results.Ok(new { status = "Healthy", timestamp =
    .WithName("HealthCheck");
 
 app.Run();
+
+static RateLimitPartition<string> CreateIpSlidingPartition(HttpContext context, int permitLimit)
+{
+    var partitionKey = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    return RateLimitPartition.GetSlidingWindowLimiter(
+        partitionKey,
+        _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = permitLimit,
+            Window = TimeSpan.FromMinutes(1),
+            SegmentsPerWindow = 4,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+}
