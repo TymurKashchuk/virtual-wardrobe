@@ -12,6 +12,8 @@ namespace Wardrobe.Api.Controllers;
 [Route("api/v1/items")]
 public class ItemsController : ControllerBase
 {
+    private const long MaxUploadRequestBytes = 11 * 1024 * 1024; // 10 MB photo + multipart form overhead
+
     private readonly IItemService _itemService;
     private readonly IFileStorageService _fileStorage;
     private readonly ICurrentUserService _currentUserService;
@@ -31,6 +33,8 @@ public class ItemsController : ControllerBase
 
     [HttpPost]
     [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxUploadRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxUploadRequestBytes)]
     public async Task<IActionResult> CreateItem(
         [FromForm] CreateItemForm form, 
         CancellationToken cancellationToken)
@@ -170,6 +174,8 @@ public class ItemsController : ControllerBase
 
     [HttpPut("{id:guid}")]
     [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxUploadRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxUploadRequestBytes)]
     public async Task<IActionResult> UpdateItem(
         Guid id, 
         [FromForm] UpdateItemForm form, 

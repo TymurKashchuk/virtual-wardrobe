@@ -9,6 +9,8 @@ public class SkiaImageProcessorService : IImageProcessorService
     private const int MaxPhotoDimension = 1600;
     private const int MaxThumbDimension = 400;
     private const int WebpQuality = 80;
+    private const int MaxAllowedImageDimension = 10_000;
+    private const long MaxAllowedImagePixels = 40_000_000;
 
     private static readonly byte[] JpegMagic = [0xFF, 0xD8, 0xFF];
     private static readonly byte[] PngMagic = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
@@ -74,6 +76,17 @@ public class SkiaImageProcessorService : IImageProcessorService
             throw new InvalidOperationException("Failed to decode image stream.");
         }
 
+        var info = codec.Info;
+        if (info.Width <= 0 ||
+            info.Height <= 0 ||
+            info.Width > MaxAllowedImageDimension ||
+            info.Height > MaxAllowedImageDimension ||
+            (long)info.Width * info.Height > MaxAllowedImagePixels)
+        {
+            throw new InvalidOperationException(
+                $"Image dimensions exceed allowed limits ({MaxAllowedImageDimension}px max side, {MaxAllowedImagePixels / 1_000_000}MP max).");
+        }
+
         var origin = codec.EncodedOrigin;
 
         using var initialBitmap = SKBitmap.Decode(codec);
@@ -100,11 +113,41 @@ public class SkiaImageProcessorService : IImageProcessorService
         SKBitmap rotated;
         switch (origin)
         {
+            case SKEncodedOrigin.TopRight: // Flip horizontal
+                rotated = new SKBitmap(bitmap.Width, bitmap.Height);
+                using (var canvas = new SKCanvas(rotated))
+                {
+                    canvas.Translate(bitmap.Width, 0);
+                    canvas.Scale(-1, 1);
+                    canvas.DrawBitmap(bitmap, 0, 0);
+                }
+                return rotated;
+
             case SKEncodedOrigin.BottomRight: // 180 degrees
                 rotated = new SKBitmap(bitmap.Width, bitmap.Height);
                 using (var canvas = new SKCanvas(rotated))
                 {
                     canvas.RotateDegrees(180, bitmap.Width / 2f, bitmap.Height / 2f);
+                    canvas.DrawBitmap(bitmap, 0, 0);
+                }
+                return rotated;
+
+            case SKEncodedOrigin.BottomLeft: // Flip vertical
+                rotated = new SKBitmap(bitmap.Width, bitmap.Height);
+                using (var canvas = new SKCanvas(rotated))
+                {
+                    canvas.Translate(0, bitmap.Height);
+                    canvas.Scale(1, -1);
+                    canvas.DrawBitmap(bitmap, 0, 0);
+                }
+                return rotated;
+
+            case SKEncodedOrigin.LeftTop: // Transpose
+                rotated = new SKBitmap(bitmap.Height, bitmap.Width);
+                using (var canvas = new SKCanvas(rotated))
+                {
+                    canvas.Scale(1, -1);
+                    canvas.RotateDegrees(270);
                     canvas.DrawBitmap(bitmap, 0, 0);
                 }
                 return rotated;
@@ -115,6 +158,17 @@ public class SkiaImageProcessorService : IImageProcessorService
                 {
                     canvas.Translate(bitmap.Height, 0);
                     canvas.RotateDegrees(90);
+                    canvas.DrawBitmap(bitmap, 0, 0);
+                }
+                return rotated;
+
+            case SKEncodedOrigin.RightBottom: // Transverse
+                rotated = new SKBitmap(bitmap.Height, bitmap.Width);
+                using (var canvas = new SKCanvas(rotated))
+                {
+                    canvas.Translate(bitmap.Height, bitmap.Width);
+                    canvas.Scale(-1, 1);
+                    canvas.RotateDegrees(270);
                     canvas.DrawBitmap(bitmap, 0, 0);
                 }
                 return rotated;
