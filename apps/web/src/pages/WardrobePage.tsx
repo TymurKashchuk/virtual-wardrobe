@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { LogOut, RotateCcw, Search, Shirt } from 'lucide-react'
+import { LogOut, Plus, RotateCcw, Search, Shirt } from 'lucide-react'
+import { AddItemModal } from '../components/AddItemModal'
 import { ItemCard } from '../components/ItemCard'
 import { useAuth } from '../context/useAuth'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
@@ -20,6 +21,7 @@ export function WardrobePage() {
   const [selectedColors, setSelectedColors] = useState<number[]>([])
   const [searchInput, setSearchInput] = useState('')
   const [sortBy, setSortBy] = useState<'newest' | 'name'>('newest')
+  const [isAddOpen, setIsAddOpen] = useState(false)
 
   const debouncedSearch = useDebouncedValue(searchInput, 300)
 
@@ -74,14 +76,24 @@ export function WardrobePage() {
               </p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => void logout()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            Вийти
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsAddOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Додати річ
+            </button>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Вийти
+            </button>
+          </div>
         </div>
       </header>
 
@@ -217,6 +229,14 @@ export function WardrobePage() {
                 <p className="mt-1 text-xs text-slate-500">
                   Додайте першу річ, щоб почати збирати образи.
                 </p>
+                <button
+                  type="button"
+                  onClick={() => setIsAddOpen(true)}
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-xs font-medium text-white hover:bg-slate-800"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Додати першу річ
+                </button>
               </>
             )}
           </div>
@@ -245,6 +265,14 @@ export function WardrobePage() {
           </>
         )}
       </main>
+
+      {isAddOpen && (
+        <AddItemModal
+          categories={categories}
+          colors={colors}
+          onClose={() => setIsAddOpen(false)}
+        />
+      )}
     </div>
   )
 }

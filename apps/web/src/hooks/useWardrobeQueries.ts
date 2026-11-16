@@ -1,5 +1,17 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { getCategories, getColors, getItems } from '../api/items'
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
+import {
+  createItem,
+  deleteItem,
+  getCategories,
+  getColors,
+  getItems,
+  type CreateItemPayload,
+} from '../api/items'
 import type { ItemFilterParams } from '../api/types'
 
 const DICTIONARY_STALE_TIME_MS = 30 * 60 * 1000
@@ -35,5 +47,27 @@ export function useInfiniteItems(filters: ItemsQueryFilters) {
       }),
     getNextPageParam: (lastPage) =>
       lastPage.hasNextPage ? lastPage.page + 1 : undefined,
+  })
+}
+
+export function useCreateItem() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: CreateItemPayload) => createItem(payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['items'] })
+    },
+  })
+}
+
+export function useDeleteItem() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => deleteItem(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['items'] })
+    },
   })
 }
