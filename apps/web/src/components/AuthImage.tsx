@@ -7,16 +7,22 @@ interface AuthImageProps {
   className?: string
 }
 
+interface ImageState {
+  src: string
+  url: string | null
+  error: boolean
+}
+
 export function AuthImage({ src, alt, className = '' }: AuthImageProps) {
-  const [objectUrl, setObjectUrl] = useState<string | null>(null)
-  const [hasError, setHasError] = useState(false)
+  const [state, setState] = useState<ImageState>({
+    src,
+    url: null,
+    error: false,
+  })
 
   useEffect(() => {
     const controller = new AbortController()
     let createdUrl: string | null = null
-
-    setHasError(false)
-    setObjectUrl(null)
 
     apiFetchBlob(src, controller.signal)
       .then((blob) => {
@@ -24,11 +30,11 @@ export function AuthImage({ src, alt, className = '' }: AuthImageProps) {
           return
         }
         createdUrl = URL.createObjectURL(blob)
-        setObjectUrl(createdUrl)
+        setState({ src, url: createdUrl, error: false })
       })
       .catch(() => {
         if (!controller.signal.aborted) {
-          setHasError(true)
+          setState({ src, url: null, error: true })
         }
       })
 
@@ -39,6 +45,10 @@ export function AuthImage({ src, alt, className = '' }: AuthImageProps) {
       }
     }
   }, [src])
+
+  const isCurrent = state.src === src
+  const objectUrl = isCurrent ? state.url : null
+  const hasError = isCurrent ? state.error : false
 
   if (hasError) {
     return (
