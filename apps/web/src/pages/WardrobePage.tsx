@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { LogOut, Plus, RotateCcw, Search, Shirt } from 'lucide-react'
+import type { ItemDto } from '../api/types'
 import { AddItemModal } from '../components/AddItemModal'
 import { ItemCard } from '../components/ItemCard'
+import { ItemDetailModal } from '../components/ItemDetailModal'
 import { useAuth } from '../context/useAuth'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import {
@@ -22,6 +24,7 @@ export function WardrobePage() {
   const [searchInput, setSearchInput] = useState('')
   const [sortBy, setSortBy] = useState<'newest' | 'name'>('newest')
   const [isAddOpen, setIsAddOpen] = useState(false)
+  const [selectedItem, setSelectedItem] = useState<ItemDto | null>(null)
 
   const debouncedSearch = useDebouncedValue(searchInput, 300)
 
@@ -246,7 +249,11 @@ export function WardrobePage() {
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
               {items.map((item) => (
-                <ItemCard key={item.id} item={item} />
+                <ItemCard
+                  key={item.id}
+                  item={item}
+                  onSelect={(clicked) => setSelectedItem(clicked)}
+                />
               ))}
             </div>
 
@@ -271,6 +278,13 @@ export function WardrobePage() {
           categories={categories}
           colors={colors}
           onClose={() => setIsAddOpen(false)}
+        />
+      )}
+
+      {selectedItem && (
+        <ItemDetailModal
+          item={selectedItem}
+          onClose={() => setSelectedItem(null)}
         />
       )}
     </div>
