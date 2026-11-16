@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Wardrobe.Application.Auth.Models;
 using Wardrobe.Application.Common.Exceptions;
 using Wardrobe.Application.Common.Interfaces;
@@ -15,20 +16,24 @@ public class AuthController : ControllerBase
     private readonly IValidator<RegisterRequest> _registerValidator;
     private readonly IValidator<LoginRequest> _loginValidator;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IWebHostEnvironment _environment;
 
     public AuthController(
         IAuthService authService,
         IValidator<RegisterRequest> registerValidator,
         IValidator<LoginRequest> loginValidator,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        IWebHostEnvironment environment)
     {
         _authService = authService;
         _registerValidator = registerValidator;
         _loginValidator = loginValidator;
         _currentUserService = currentUserService;
+        _environment = environment;
     }
 
     [HttpPost("register")]
+    [EnableRateLimiting("auth-strict")]
     public async Task<IActionResult> Register(
         [FromBody] RegisterRequest request, 
         CancellationToken cancellationToken)
@@ -55,6 +60,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("confirm-email")]
+    [EnableRateLimiting("auth-strict")]
     public async Task<IActionResult> ConfirmEmail(
         [FromBody] ConfirmEmailRequest request, 
         CancellationToken cancellationToken)
@@ -76,6 +82,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("auth-strict")]
     public async Task<IActionResult> Login(
         [FromBody] LoginRequest request, 
         CancellationToken cancellationToken)
@@ -119,11 +126,10 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("refresh")]
-    public async Task<IActionResult> Refresh(
-        [FromBody] RefreshTokenRequestBody? body, 
-        CancellationToken cancellationToken)
+    [EnableRateLimiting("auth-refresh")]
+    public async Task<IActionResult> Refresh(CancellationToken cancellationToken)
     {
-        var token = Request.Cookies["refreshToken"] ?? body?.RefreshToken;
+        var token = await ExtractRefreshTokenAsync(cancellationToken);
 
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -146,21 +152,23 @@ public class AuthController : ControllerBase
         }
         catch (AuthException ex)
         {
+            DeleteRefreshTokenCookie();
             return Unauthorized(new { message = ex.Message });
         }
     }
 
     [HttpPost("logout")]
+    [EnableRateLimiting("auth-refresh")]
     public async Task<IActionResult> Logout(CancellationToken cancellationToken)
     {
-        var token = Request.Cookies["refreshToken"];
+        var token = await ExtractRefreshTokenAsync(cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(token))
         {
             await _authService.LogoutAsync(token, cancellationToken);
         }
 
-        Response.Cookies.Delete("refreshToken");
+        DeleteRefreshTokenCookie();
         return Ok(new { message = "Logged out successfully." });
     }
 
@@ -175,17 +183,53 @@ public class AuthController : ControllerBase
         });
     }
 
+    private async Task<string?> ExtractRefreshTokenAsync(CancellationToken cancellationToken)
+    {
+        var cookieToken = Request.Cookies["refreshToken"];
+        if (!string.IsNullOrWhiteSpace(cookieToken))
+        {
+            return cookieToken;
+        }
+
+        if (Request.HasJsonContentType() && Request.ContentLength is > 0)
+        {
+            try
+            {
+                var body = await Request.ReadFromJsonAsync<RefreshTokenRequestBody>(cancellationToken);
+                return body?.RefreshToken;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
     private void SetRefreshTokenCookie(string refreshToken)
     {
-        var cookieOptions = new CookieOptions
+        Response.Cookies.Append(
+            "refreshToken",
+            refreshToken,
+            BuildRefreshTokenCookieOptions(DateTimeOffset.UtcNow.AddDays(30)));
+    }
+
+    private void DeleteRefreshTokenCookie()
+    {
+        Response.Cookies.Delete("refreshToken", BuildRefreshTokenCookieOptions());
+    }
+
+    private CookieOptions BuildRefreshTokenCookieOptions(DateTimeOffset? expires = null)
+    {
+        return new CookieOptions
         {
             HttpOnly = true,
-            Secure = true,
+            Secure = Request.IsHttps || !_environment.IsDevelopment(),
             SameSite = SameSiteMode.Strict,
-            Expires = DateTimeOffset.UtcNow.AddDays(30)
+            Path = "/api/v1/auth",
+            Expires = expires
         };
-
-        Response.Cookies.Append("refreshToken", refreshToken, cookieOptions);
     }
 }
 

@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Wardrobe.Application.Auth.Models;
 using Wardrobe.Application.Common.Exceptions;
@@ -55,12 +56,13 @@ public class AuthService : IAuthService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         var confirmationToken = _jwtTokenService.GenerateEmailConfirmationToken(user);
+        var safeDisplayName = WebUtility.HtmlEncode(user.DisplayName);
 
         var emailSubject = "Підтвердження реєстрації у Virtual Wardrobe";
         var emailBody = $"""
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <h2 style="color: #333;">Ласкаво просимо до Virtual Wardrobe!</h2>
-                <p>Привіт, <strong>{user.DisplayName}</strong>!</p>
+                <p>Привіт, <strong>{safeDisplayName}</strong>!</p>
                 <p>Дякуємо за реєстрацію. Будь ласка, підтвердіть вашу адресу електронної пошти.</p>
                 <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 15px; margin: 20px 0;">
                     <p style="margin: 0 0 10px 0; font-weight: bold;">Ваш одноразовий токен підтвердження (діє 24 години):</p>
@@ -153,7 +155,18 @@ public class AuthService : IAuthService
             .Include(rt => rt.User)
             .FirstOrDefaultAsync(rt => rt.TokenHash == tokenHash, cancellationToken);
 
-        if (existingToken == null || !existingToken.IsActive || existingToken.User == null)
+        if (existingToken == null || existingToken.User == null)
+        {
+            throw new AuthException("Invalid or expired refresh token.");
+        }
+
+        if (existingToken.RevokedAt != null)
+        {
+            await RevokeAllUserRefreshTokensAsync(existingToken.UserId, cancellationToken);
+            throw new AuthException("Refresh token reuse detected. Please log in again.");
+        }
+
+        if (!existingToken.IsActive)
         {
             throw new AuthException("Invalid or expired refresh token.");
         }
@@ -196,5 +209,25 @@ public class AuthService : IAuthService
             existingToken.RevokedAt = DateTimeOffset.UtcNow;
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    private async Task RevokeAllUserRefreshTokensAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var activeTokens = await _dbContext.RefreshTokens
+            .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
+            .ToListAsync(cancellationToken);
+
+        if (activeTokens.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var token in activeTokens)
+        {
+            token.RevokedAt = now;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }

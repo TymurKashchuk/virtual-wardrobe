@@ -1,4 +1,5 @@
 using FluentValidation;
+using FluentValidation.Results;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Wardrobe.Application.Common.Interfaces;
@@ -13,28 +14,35 @@ namespace Wardrobe.Api.Controllers;
 [Route("api/v1/items")]
 public class ItemsController : ControllerBase
 {
+    private const long MaxUploadRequestBytes = 11 * 1024 * 1024; // 10 MB photo + multipart form overhead
+
     private readonly IItemService _itemService;
     private readonly IOutfitService _outfitService;
     private readonly IFileStorageService _fileStorage;
     private readonly ICurrentUserService _currentUserService;
     private readonly IValidator<CreateItemRequest> _createValidator;
+    private readonly IValidator<UpdateItemRequest> _updateValidator;
 
     public ItemsController(
         IItemService itemService,
         IOutfitService outfitService,
         IFileStorageService fileStorage,
         ICurrentUserService currentUserService,
-        IValidator<CreateItemRequest> createValidator)
+        IValidator<CreateItemRequest> createValidator,
+        IValidator<UpdateItemRequest> updateValidator)
     {
         _itemService = itemService;
         _outfitService = outfitService;
         _fileStorage = fileStorage;
         _currentUserService = currentUserService;
         _createValidator = createValidator;
+        _updateValidator = updateValidator;
     }
 
     [HttpPost]
     [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxUploadRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxUploadRequestBytes)]
     public async Task<IActionResult> CreateItem(
         [FromForm] CreateItemForm form, 
         CancellationToken cancellationToken)
@@ -67,11 +75,7 @@ public class ItemsController : ControllerBase
         var validationResult = await _createValidator.ValidateAsync(request, cancellationToken);
         if (!validationResult.IsValid)
         {
-            var errors = validationResult.Errors
-                .GroupBy(e => e.PropertyName)
-                .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
-
-            return BadRequest(new { errors });
+            return BadRequest(new { errors = ToValidationErrors(validationResult) });
         }
 
         try
@@ -191,6 +195,8 @@ public class ItemsController : ControllerBase
 
     [HttpPut("{id:guid}")]
     [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxUploadRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxUploadRequestBytes)]
     public async Task<IActionResult> UpdateItem(
         Guid id, 
         [FromForm] UpdateItemForm form, 
@@ -208,20 +214,26 @@ public class ItemsController : ControllerBase
             newStream = form.NewPhoto.OpenReadStream();
         }
 
-        var request = new UpdateItemRequest(
-            form.Name,
-            form.CategoryId,
-            form.PrimaryColorId,
-            form.SecondaryColorIds,
-            form.Style,
-            form.Notes,
-            newStream,
-            form.NewPhoto?.FileName,
-            form.NewPhoto?.Length
-        );
-
         try
         {
+            var request = new UpdateItemRequest(
+                form.Name,
+                form.CategoryId,
+                form.PrimaryColorId,
+                form.SecondaryColorIds,
+                form.Style,
+                form.Notes,
+                newStream,
+                form.NewPhoto?.FileName,
+                form.NewPhoto?.Length
+            );
+
+            var validationResult = await _updateValidator.ValidateAsync(request, cancellationToken);
+            if (!validationResult.IsValid)
+            {
+                return BadRequest(new { errors = ToValidationErrors(validationResult) });
+            }
+
             var result = await _itemService.UpdateItemAsync(userId.Value, id, request, cancellationToken);
             return Ok(result);
         }
@@ -251,6 +263,13 @@ public class ItemsController : ControllerBase
 
         await _itemService.DeleteItemAsync(userId.Value, id, cancellationToken);
         return NoContent();
+    }
+
+    private static Dictionary<string, string[]> ToValidationErrors(ValidationResult validationResult)
+    {
+        return validationResult.Errors
+            .GroupBy(e => e.PropertyName)
+            .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
     }
 }
 

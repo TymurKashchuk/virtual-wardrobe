@@ -101,7 +101,15 @@ public class ItemService : IItemService
         _dbContext.Items.Add(item);
         _dbContext.ItemColors.AddRange(itemColors);
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            await DeleteFilesSafelyAsync(photoKey, thumbKey);
+            throw;
+        }
 
         return await GetItemByIdAsync(userId, itemId, cancellationToken)
             ?? throw new InvalidOperationException("Failed to retrieve created item.");
@@ -231,6 +239,11 @@ public class ItemService : IItemService
 
         _dbContext.ItemColors.AddRange(newItemColors);
 
+        string? oldPhotoKey = null;
+        string? oldThumbKey = null;
+        string? newPhotoKey = null;
+        string? newThumbKey = null;
+
         if (request.NewPhotoStream != null)
         {
             if (!_imageProcessor.ValidateImageSignature(request.NewPhotoStream))
@@ -239,22 +252,42 @@ public class ItemService : IItemService
             }
 
             var processed = await _imageProcessor.ProcessItemPhotoAsync(request.NewPhotoStream, cancellationToken);
+            var version = Guid.NewGuid().ToString("N")[..8];
 
-            await _fileStorage.DeleteFileAsync(item.PhotoKey, cancellationToken);
-            await _fileStorage.DeleteFileAsync(item.ThumbKey, cancellationToken);
+            oldPhotoKey = item.PhotoKey;
+            oldThumbKey = item.ThumbKey;
 
-            item.PhotoKey = await _fileStorage.SaveFileAsync(
-                $"items/{userId}/{itemId}.webp", 
-                processed.PhotoBytes, 
+            newPhotoKey = await _fileStorage.SaveFileAsync(
+                $"items/{userId}/{itemId}_{version}.webp",
+                processed.PhotoBytes,
                 cancellationToken);
 
-            item.ThumbKey = await _fileStorage.SaveFileAsync(
-                $"items/{userId}/{itemId}_thumb.webp", 
-                processed.ThumbnailBytes, 
+            newThumbKey = await _fileStorage.SaveFileAsync(
+                $"items/{userId}/{itemId}_{version}_thumb.webp",
+                processed.ThumbnailBytes,
                 cancellationToken);
+
+            item.PhotoKey = newPhotoKey;
+            item.ThumbKey = newThumbKey;
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            if (newPhotoKey != null && newThumbKey != null)
+            {
+                await DeleteFilesSafelyAsync(newPhotoKey, newThumbKey);
+            }
+            throw;
+        }
+
+        if (oldPhotoKey != null && oldThumbKey != null)
+        {
+            await DeleteFilesSafelyAsync(oldPhotoKey, oldThumbKey);
+        }
 
         return await GetItemByIdAsync(userId, itemId, cancellationToken)
             ?? throw new InvalidOperationException("Failed to retrieve updated item.");
@@ -272,6 +305,9 @@ public class ItemService : IItemService
         {
             return;
         }
+
+        var photoKey = item.PhotoKey;
+        var thumbKey = item.ThumbKey;
 
         var affectedOutfitIds = await _dbContext.OutfitItems
             .Where(oi => oi.ItemId == itemId)
@@ -298,10 +334,29 @@ public class ItemService : IItemService
             }
         }
 
-        await _fileStorage.DeleteFileAsync(item.PhotoKey, cancellationToken);
-        await _fileStorage.DeleteFileAsync(item.ThumbKey, cancellationToken);
-
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await DeleteFilesSafelyAsync(photoKey, thumbKey);
+    }
+
+    private async Task DeleteFilesSafelyAsync(params string[] fileKeys)
+    {
+        foreach (var fileKey in fileKeys)
+        {
+            if (string.IsNullOrWhiteSpace(fileKey))
+            {
+                continue;
+            }
+
+            try
+            {
+                await _fileStorage.DeleteFileAsync(fileKey, CancellationToken.None);
+            }
+            catch
+            {
+                // Best-effort cleanup so orphaned-file errors do not mask the primary result.
+            }
+        }
     }
 
     private static ItemDto MapToDto(Item item)
