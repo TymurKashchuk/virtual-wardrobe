@@ -18,6 +18,7 @@ public class AuthService : IAuthService
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IEmailSenderService _emailSenderService;
     private readonly IMemoryCache _memoryCache;
+    private readonly IGoogleTokenValidator? _googleTokenValidator;
     private readonly AppOptions _appOptions;
 
     public AuthService(
@@ -26,7 +27,8 @@ public class AuthService : IAuthService
         IJwtTokenService jwtTokenService,
         IEmailSenderService emailSenderService,
         IMemoryCache memoryCache,
-        IOptions<AppOptions>? appOptions = null)
+        IOptions<AppOptions>? appOptions = null,
+        IGoogleTokenValidator? googleTokenValidator = null)
     {
         _dbContext = dbContext;
         _passwordHasherService = passwordHasherService;
@@ -34,6 +36,7 @@ public class AuthService : IAuthService
         _emailSenderService = emailSenderService;
         _memoryCache = memoryCache;
         _appOptions = appOptions?.Value ?? new AppOptions();
+        _googleTokenValidator = googleTokenValidator;
     }
 
     public async Task<RegisterResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default)
@@ -121,27 +124,52 @@ public class AuthService : IAuthService
             throw new EmailNotConfirmedException("Email is not confirmed. Please confirm your email address before logging in.");
         }
 
-        var accessToken = _jwtTokenService.GenerateAccessToken(user);
-        var refreshToken = _jwtTokenService.GenerateRefreshToken();
-        var refreshTokenHash = _jwtTokenService.HashToken(refreshToken);
+        return await IssueAuthTokensAsync(user, cancellationToken);
+    }
 
-        var refreshTokenEntity = new RefreshToken
+    public async Task<AuthResponse> GoogleLoginAsync(GoogleLoginRequest request, CancellationToken cancellationToken = default)
+    {
+        if (_googleTokenValidator == null)
         {
-            UserId = user.Id,
-            TokenHash = refreshTokenHash,
-            ExpiresAt = DateTimeOffset.UtcNow.AddDays(30),
-            CreatedAt = DateTimeOffset.UtcNow
-        };
+            throw new InvalidOperationException("Google token validator is not configured.");
+        }
 
-        _dbContext.RefreshTokens.Add(refreshTokenEntity);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        var payload = await _googleTokenValidator.ValidateIdTokenAsync(request.IdToken, cancellationToken);
+        if (!payload.EmailVerified)
+        {
+            throw new AuthException("Google account email is not verified.");
+        }
 
-        return new AuthResponse(
-            accessToken,
-            refreshToken,
-            user.Id,
-            user.Email,
-            user.DisplayName);
+        var normalizedEmail = payload.Email.Trim().ToLowerInvariant();
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail, cancellationToken);
+
+        if (user != null)
+        {
+            if (user.EmailConfirmedAt == null)
+            {
+                throw new EmailNotConfirmedException(
+                    "An account with this email already exists and is awaiting email confirmation. Please confirm your email first to link your Google account.");
+            }
+        }
+        else
+        {
+            var now = DateTimeOffset.UtcNow;
+            user = new User
+            {
+                Email = normalizedEmail,
+                DisplayName = ResolveDisplayName(payload.Name, normalizedEmail),
+                PasswordHash = null,
+                Role = UserRole.User,
+                EmailConfirmedAt = now,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            _dbContext.Users.Add(user);
+        }
+
+        return await IssueAuthTokensAsync(user, cancellationToken);
     }
 
     public async Task ConfirmEmailAsync(ConfirmEmailRequest request, CancellationToken cancellationToken = default)
@@ -224,28 +252,7 @@ public class AuthService : IAuthService
 
         existingToken.RevokedAt = DateTimeOffset.UtcNow;
 
-        var newRefreshToken = _jwtTokenService.GenerateRefreshToken();
-        var newRefreshTokenHash = _jwtTokenService.HashToken(newRefreshToken);
-
-        var newRefreshTokenEntity = new RefreshToken
-        {
-            UserId = existingToken.UserId,
-            TokenHash = newRefreshTokenHash,
-            ExpiresAt = DateTimeOffset.UtcNow.AddDays(30),
-            CreatedAt = DateTimeOffset.UtcNow
-        };
-
-        _dbContext.RefreshTokens.Add(newRefreshTokenEntity);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        var newAccessToken = _jwtTokenService.GenerateAccessToken(existingToken.User);
-
-        return new AuthResponse(
-            newAccessToken,
-            newRefreshToken,
-            existingToken.User.Id,
-            existingToken.User.Email,
-            existingToken.User.DisplayName);
+        return await IssueAuthTokensAsync(existingToken.User, cancellationToken);
     }
 
     public async Task LogoutAsync(string refreshToken, CancellationToken cancellationToken = default)
@@ -260,6 +267,40 @@ public class AuthService : IAuthService
             existingToken.RevokedAt = DateTimeOffset.UtcNow;
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    private async Task<AuthResponse> IssueAuthTokensAsync(User user, CancellationToken cancellationToken)
+    {
+        var accessToken = _jwtTokenService.GenerateAccessToken(user);
+        var refreshToken = _jwtTokenService.GenerateRefreshToken();
+        var refreshTokenHash = _jwtTokenService.HashToken(refreshToken);
+
+        var refreshTokenEntity = new RefreshToken
+        {
+            UserId = user.Id,
+            TokenHash = refreshTokenHash,
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(30),
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        _dbContext.RefreshTokens.Add(refreshTokenEntity);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new AuthResponse(
+            accessToken,
+            refreshToken,
+            user.Id,
+            user.Email,
+            user.DisplayName);
+    }
+
+    private static string ResolveDisplayName(string? name, string normalizedEmail)
+    {
+        var candidate = !string.IsNullOrWhiteSpace(name)
+            ? name.Trim()
+            : normalizedEmail.Split('@')[0];
+
+        return candidate.Length > 100 ? candidate[..100] : candidate;
     }
 
     private async Task RevokeAllUserRefreshTokensAsync(Guid userId, CancellationToken cancellationToken)

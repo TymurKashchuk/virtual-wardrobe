@@ -25,6 +25,7 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IEmailSenderService, EmailSenderService>();
+        services.AddScoped<IGoogleTokenValidator, GoogleTokenValidator>();
 
         services.AddSingleton<IFileStorageService, LocalFileStorageService>();
         services.AddSingleton<IImageProcessorService, SkiaImageProcessorService>();

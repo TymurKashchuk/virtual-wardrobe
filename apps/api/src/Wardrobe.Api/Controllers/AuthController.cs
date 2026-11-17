@@ -16,6 +16,7 @@ public class AuthController : ControllerBase
     private readonly IAuthService _authService;
     private readonly IValidator<RegisterRequest> _registerValidator;
     private readonly IValidator<LoginRequest> _loginValidator;
+    private readonly IValidator<GoogleLoginRequest> _googleLoginValidator;
     private readonly IValidator<ResendConfirmationRequest> _resendValidator;
     private readonly ICurrentUserService _currentUserService;
     private readonly IWebHostEnvironment _environment;
@@ -24,6 +25,7 @@ public class AuthController : ControllerBase
         IAuthService authService,
         IValidator<RegisterRequest> registerValidator,
         IValidator<LoginRequest> loginValidator,
+        IValidator<GoogleLoginRequest> googleLoginValidator,
         IValidator<ResendConfirmationRequest> resendValidator,
         ICurrentUserService currentUserService,
         IWebHostEnvironment environment)
@@ -31,6 +33,7 @@ public class AuthController : ControllerBase
         _authService = authService;
         _registerValidator = registerValidator;
         _loginValidator = loginValidator;
+        _googleLoginValidator = googleLoginValidator;
         _resendValidator = resendValidator;
         _currentUserService = currentUserService;
         _environment = environment;
@@ -123,6 +126,46 @@ public class AuthController : ControllerBase
         try
         {
             var response = await _authService.LoginAsync(request, cancellationToken);
+            SetRefreshTokenCookie(response.RefreshToken);
+
+            return Ok(new
+            {
+                response.AccessToken,
+                response.RefreshToken,
+                response.UserId,
+                response.Email,
+                response.DisplayName
+            });
+        }
+        catch (EmailNotConfirmedException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                error = "email_not_confirmed",
+                message = ex.Message
+            });
+        }
+        catch (AuthException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("google")]
+    [EnableRateLimiting("auth-strict")]
+    public async Task<IActionResult> GoogleLogin(
+        [FromBody] GoogleLoginRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validationResult = await _googleLoginValidator.ValidateAsync(request, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(new { errors = ToValidationErrors(validationResult) });
+        }
+
+        try
+        {
+            var response = await _authService.GoogleLoginAsync(request, cancellationToken);
             SetRefreshTokenCookie(response.RefreshToken);
 
             return Ok(new
