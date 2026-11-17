@@ -9,4 +9,5 @@ public interface IProfileService
     Task<UserProfileDto> UpdateAvatarAsync(Guid userId, Stream photoStream, long fileLength, CancellationToken cancellationToken = default);
     Task<string?> GetAvatarKeyAsync(Guid userId, CancellationToken cancellationToken = default);
     Task DeleteAvatarAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken cancellationToken = default);
 }

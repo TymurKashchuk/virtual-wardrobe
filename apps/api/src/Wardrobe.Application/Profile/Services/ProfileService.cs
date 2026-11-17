@@ -12,15 +12,18 @@ public class ProfileService : IProfileService
     private readonly IWardrobeDbContext _dbContext;
     private readonly IImageProcessorService _imageProcessor;
     private readonly IFileStorageService _fileStorage;
+    private readonly IPasswordHasherService _passwordHasher;
 
     public ProfileService(
         IWardrobeDbContext dbContext,
         IImageProcessorService imageProcessor,
-        IFileStorageService fileStorage)
+        IFileStorageService fileStorage,
+        IPasswordHasherService passwordHasher)
     {
         _dbContext = dbContext;
         _imageProcessor = imageProcessor;
         _fileStorage = fileStorage;
+        _passwordHasher = passwordHasher;
     }
 
     public async Task<UserProfileDto> GetProfileAsync(
@@ -132,6 +135,40 @@ public class ProfileService : IProfileService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         await DeleteFileSafelyAsync(oldAvatarKey);
+    }
+
+    public async Task ChangePasswordAsync(
+        Guid userId,
+        ChangePasswordRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            ?? throw new KeyNotFoundException("User not found.");
+
+        if (!string.IsNullOrEmpty(user.PasswordHash))
+        {
+            if (string.IsNullOrWhiteSpace(request.CurrentPassword) ||
+                !_passwordHasher.VerifyPassword(request.CurrentPassword, user.PasswordHash))
+            {
+                throw new InvalidOperationException("Current password is incorrect.");
+            }
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        user.PasswordHash = _passwordHasher.HashPassword(request.NewPassword);
+        user.UpdatedAt = now;
+
+        var activeTokens = await _dbContext.RefreshTokens
+            .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var token in activeTokens)
+        {
+            token.RevokedAt = now;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task DeleteFileSafelyAsync(string fileKey)
