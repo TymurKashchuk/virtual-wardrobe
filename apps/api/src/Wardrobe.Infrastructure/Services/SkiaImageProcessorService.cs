@@ -8,6 +8,7 @@ public class SkiaImageProcessorService : IImageProcessorService
 {
     private const int MaxPhotoDimension = 1600;
     private const int MaxThumbDimension = 400;
+    private const int MaxAvatarDimension = 400;
     private const int WebpQuality = 80;
     private const int MaxAllowedImageDimension = 10_000;
     private const long MaxAllowedImagePixels = 40_000_000;
@@ -65,6 +66,27 @@ public class SkiaImageProcessorService : IImageProcessorService
         Stream imageStream, 
         CancellationToken cancellationToken = default)
     {
+        using var orientedBitmap = DecodeOrientedBitmap(imageStream);
+
+        var photoBytes = CreateResizedWebp(orientedBitmap, MaxPhotoDimension);
+        var thumbBytes = CreateResizedWebp(orientedBitmap, MaxThumbDimension);
+
+        return Task.FromResult(new ProcessedImageResult(photoBytes, thumbBytes));
+    }
+
+    public Task<byte[]> ProcessAvatarAsync(
+        Stream imageStream,
+        CancellationToken cancellationToken = default)
+    {
+        using var orientedBitmap = DecodeOrientedBitmap(imageStream);
+
+        var avatarBytes = CreateCenterCroppedSquareWebp(orientedBitmap, MaxAvatarDimension);
+
+        return Task.FromResult(avatarBytes);
+    }
+
+    private static SKBitmap DecodeOrientedBitmap(Stream imageStream)
+    {
         if (imageStream.CanSeek)
         {
             imageStream.Position = 0;
@@ -95,12 +117,7 @@ public class SkiaImageProcessorService : IImageProcessorService
             throw new InvalidOperationException("Failed to decode image bitmap.");
         }
 
-        using var orientedBitmap = ApplyOrientation(initialBitmap, origin);
-
-        var photoBytes = CreateResizedWebp(orientedBitmap, MaxPhotoDimension);
-        var thumbBytes = CreateResizedWebp(orientedBitmap, MaxThumbDimension);
-
-        return Task.FromResult(new ProcessedImageResult(photoBytes, thumbBytes));
+        return ApplyOrientation(initialBitmap, origin);
     }
 
     private static SKBitmap ApplyOrientation(SKBitmap bitmap, SKEncodedOrigin origin)
@@ -191,7 +208,22 @@ public class SkiaImageProcessorService : IImageProcessorService
     private static byte[] CreateResizedWebp(SKBitmap source, int maxDimension)
     {
         var (targetWidth, targetHeight) = CalculateTargetSize(source.Width, source.Height, maxDimension);
+        var srcRect = new SKRect(0, 0, source.Width, source.Height);
+        return EncodeWebp(source, srcRect, targetWidth, targetHeight);
+    }
 
+    private static byte[] CreateCenterCroppedSquareWebp(SKBitmap source, int maxSide)
+    {
+        var cropSide = Math.Min(source.Width, source.Height);
+        var left = (source.Width - cropSide) / 2f;
+        var top = (source.Height - cropSide) / 2f;
+        var srcRect = new SKRect(left, top, left + cropSide, top + cropSide);
+        var targetSide = Math.Min(cropSide, maxSide);
+        return EncodeWebp(source, srcRect, targetSide, targetSide);
+    }
+
+    private static byte[] EncodeWebp(SKBitmap source, SKRect srcRect, int targetWidth, int targetHeight)
+    {
         using var targetBitmap = new SKBitmap(targetWidth, targetHeight, source.ColorType, source.AlphaType);
         using (var canvas = new SKCanvas(targetBitmap))
         {
@@ -202,7 +234,7 @@ public class SkiaImageProcessorService : IImageProcessorService
                 FilterQuality = SKFilterQuality.High,
                 IsAntialias = true
             };
-            canvas.DrawBitmap(source, destRect, paint);
+            canvas.DrawBitmap(source, srcRect, destRect, paint);
         }
 
         using var image = SKImage.FromBitmap(targetBitmap);
