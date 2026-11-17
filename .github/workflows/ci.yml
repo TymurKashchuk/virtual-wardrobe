@@ -49,5 +49,8 @@ jobs:
       - name: Install dependencies
         run: npm ci --prefix apps/web
 
+      - name: Lint
+        run: npm run lint --prefix apps/web
+
       - name: Build and typecheck
         run: npm run build --prefix apps/web
