@@ -222,6 +222,30 @@ public class MeController : ControllerBase
         }
     }
 
+    [HttpDelete]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteAccount(CancellationToken cancellationToken)
+    {
+        var userId = _currentUserService.UserId;
+        if (userId == null)
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            await _profileService.DeleteAccountAsync(userId.Value, cancellationToken);
+            DeleteRefreshTokenCookie();
+            return NoContent();
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
     private void DeleteRefreshTokenCookie()
     {
         Response.Cookies.Delete("refreshToken", new CookieOptions

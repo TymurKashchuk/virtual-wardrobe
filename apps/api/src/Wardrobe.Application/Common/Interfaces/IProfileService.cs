@@ -10,4 +10,5 @@ public interface IProfileService
     Task<string?> GetAvatarKeyAsync(Guid userId, CancellationToken cancellationToken = default);
     Task DeleteAvatarAsync(Guid userId, CancellationToken cancellationToken = default);
     Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken cancellationToken = default);
+    Task DeleteAccountAsync(Guid userId, CancellationToken cancellationToken = default);
 }

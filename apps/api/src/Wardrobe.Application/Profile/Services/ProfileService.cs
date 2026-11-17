@@ -171,6 +171,51 @@ public class ProfileService : IProfileService
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task DeleteAccountAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            ?? throw new KeyNotFoundException("User not found.");
+
+        var itemMedia = await _dbContext.Items
+            .AsNoTracking()
+            .Where(i => i.UserId == userId)
+            .Select(i => new { i.PhotoKey, i.ThumbKey, i.PhotoCutoutKey })
+            .ToListAsync(cancellationToken);
+
+        var filesToDelete = new List<string>();
+        if (!string.IsNullOrWhiteSpace(user.AvatarKey))
+        {
+            filesToDelete.Add(user.AvatarKey);
+        }
+
+        foreach (var media in itemMedia)
+        {
+            if (!string.IsNullOrWhiteSpace(media.PhotoKey))
+            {
+                filesToDelete.Add(media.PhotoKey);
+            }
+            if (!string.IsNullOrWhiteSpace(media.ThumbKey))
+            {
+                filesToDelete.Add(media.ThumbKey);
+            }
+            if (!string.IsNullOrWhiteSpace(media.PhotoCutoutKey))
+            {
+                filesToDelete.Add(media.PhotoCutoutKey);
+            }
+        }
+
+        _dbContext.Users.Remove(user);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        foreach (var fileKey in filesToDelete)
+        {
+            await DeleteFileSafelyAsync(fileKey);
+        }
+    }
+
     private async Task DeleteFileSafelyAsync(string fileKey)
     {
         try
