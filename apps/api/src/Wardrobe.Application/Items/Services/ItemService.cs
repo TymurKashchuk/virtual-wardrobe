@@ -170,6 +170,36 @@ public class ItemService : IItemService
         };
     }
 
+    public async Task<WardrobeSummaryDto> GetSummaryAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var categories = await _dbContext.Categories
+            .AsNoTracking()
+            .OrderBy(c => c.SortOrder)
+            .Select(c => new { c.Id, c.Code, c.NameUk })
+            .ToListAsync(cancellationToken);
+
+        var countsByCategory = await _dbContext.Items
+            .AsNoTracking()
+            .Where(i => i.UserId == userId)
+            .GroupBy(i => i.CategoryId)
+            .Select(g => new { CategoryId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.CategoryId, x => x.Count, cancellationToken);
+
+        var categorySummaries = categories
+            .Select(c => new CategorySummaryDto(
+                c.Id,
+                c.Code,
+                c.NameUk,
+                countsByCategory.GetValueOrDefault(c.Id, 0)))
+            .ToList();
+
+        var totalCount = categorySummaries.Sum(c => c.Count);
+
+        return new WardrobeSummaryDto(totalCount, MaxItemsPerUser, categorySummaries);
+    }
+
     public async Task<ItemDto?> GetItemByIdAsync(
         Guid userId, 
         Guid itemId, 

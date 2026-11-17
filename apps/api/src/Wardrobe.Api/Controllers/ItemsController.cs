@@ -104,6 +104,21 @@ public class ItemsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("summary")]
+    [ProducesResponseType(typeof(WardrobeSummaryDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetSummary(CancellationToken cancellationToken)
+    {
+        var userId = _currentUserService.UserId;
+        if (userId == null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _itemService.GetSummaryAsync(userId.Value, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetItemById(
         Guid id, 
