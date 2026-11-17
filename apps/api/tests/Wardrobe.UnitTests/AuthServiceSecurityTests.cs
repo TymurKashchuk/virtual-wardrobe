@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Wardrobe.Application.Auth.Models;
@@ -49,6 +50,7 @@ public class AuthServiceSecurityTests
             new PasswordHasherService(),
             CreateJwtTokenService(),
             emailSender,
+            new MemoryCache(new MemoryCacheOptions()),
             Options.Create(new AppOptions { FrontendBaseUrl = "https://wardrobe.example.com/" }));
 
         await sut.RegisterAsync(new RegisterRequest(
@@ -73,7 +75,8 @@ public class AuthServiceSecurityTests
             dbContext,
             new PasswordHasherService(),
             jwtService,
-            emailSender);
+            emailSender,
+            new MemoryCache(new MemoryCacheOptions()));
 
         var victim = new User
         {

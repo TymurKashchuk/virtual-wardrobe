@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Wardrobe.Application.Auth.Models;
 using Wardrobe.Application.Common.Exceptions;
@@ -16,6 +17,7 @@ public class AuthService : IAuthService
     private readonly IPasswordHasherService _passwordHasherService;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IEmailSenderService _emailSenderService;
+    private readonly IMemoryCache _memoryCache;
     private readonly AppOptions _appOptions;
 
     public AuthService(
@@ -23,12 +25,14 @@ public class AuthService : IAuthService
         IPasswordHasherService passwordHasherService,
         IJwtTokenService jwtTokenService,
         IEmailSenderService emailSenderService,
+        IMemoryCache memoryCache,
         IOptions<AppOptions>? appOptions = null)
     {
         _dbContext = dbContext;
         _passwordHasherService = passwordHasherService;
         _jwtTokenService = jwtTokenService;
         _emailSenderService = emailSenderService;
+        _memoryCache = memoryCache;
         _appOptions = appOptions?.Value ?? new AppOptions();
     }
 
@@ -61,6 +65,7 @@ public class AuthService : IAuthService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await SendConfirmationEmailAsync(user, cancellationToken);
+        _memoryCache.Set(GetResendCooldownKey(normalizedEmail), true, TimeSpan.FromMinutes(1));
 
         return new RegisterResponse(
             user.Id, 
@@ -164,6 +169,34 @@ public class AuthService : IAuthService
         user.EmailConfirmedAt = DateTimeOffset.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task ResendConfirmationEmailAsync(
+        ResendConfirmationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var cooldownKey = GetResendCooldownKey(normalizedEmail);
+
+        if (_memoryCache.TryGetValue(cooldownKey, out _))
+        {
+            throw new RateLimitExceededException(
+                "Confirmation email was recently requested. Please wait 1 minute before trying again.");
+        }
+
+        _memoryCache.Set(cooldownKey, true, TimeSpan.FromMinutes(1));
+
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail, cancellationToken);
+
+        if (user == null || user.EmailConfirmedAt != null)
+        {
+            return;
+        }
+
+        await SendConfirmationEmailAsync(user, cancellationToken);
+    }
+
+    private static string GetResendCooldownKey(string normalizedEmail) => $"resend_confirm:{normalizedEmail}";
 
     public async Task<AuthResponse> RefreshTokenAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
