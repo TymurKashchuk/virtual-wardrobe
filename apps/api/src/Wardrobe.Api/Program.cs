@@ -3,6 +3,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
+using Scalar.AspNetCore;
 using Wardrobe.Api.Services;
 using Wardrobe.Application;
 using Wardrobe.Application.Common.Interfaces;
@@ -97,6 +98,7 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.MapScalarApiReference();
 }
 else
 {
