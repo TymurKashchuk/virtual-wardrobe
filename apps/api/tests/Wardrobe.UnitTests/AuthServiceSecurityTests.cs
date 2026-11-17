@@ -139,6 +139,116 @@ public class AuthServiceSecurityTests
         Assert.Null(otherToken.RevokedAt);
     }
 
+    [Fact]
+    public async Task ResendConfirmationEmailAsync_EnforcesCooldownAndSendsOnlyForUnconfirmedUser()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var emailSender = new CapturingEmailSenderService();
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        var sut = new AuthService(
+            dbContext,
+            new PasswordHasherService(),
+            CreateJwtTokenService(),
+            emailSender,
+            cache);
+
+        dbContext.Users.Add(new User
+        {
+            Email = "unconfirmed@example.com",
+            DisplayName = "Unconfirmed",
+            PasswordHash = "hash",
+            EmailConfirmedAt = null
+        });
+        dbContext.Users.Add(new User
+        {
+            Email = "confirmed@example.com",
+            DisplayName = "Confirmed",
+            PasswordHash = "hash",
+            EmailConfirmedAt = DateTimeOffset.UtcNow
+        });
+        await dbContext.SaveChangesAsync();
+
+        await sut.ResendConfirmationEmailAsync(new ResendConfirmationRequest("unconfirmed@example.com"));
+        Assert.Single(emailSender.SentEmails);
+
+        await Assert.ThrowsAsync<RateLimitExceededException>(() =>
+            sut.ResendConfirmationEmailAsync(new ResendConfirmationRequest("unconfirmed@example.com")));
+
+        await sut.ResendConfirmationEmailAsync(new ResendConfirmationRequest("confirmed@example.com"));
+        await sut.ResendConfirmationEmailAsync(new ResendConfirmationRequest("missing@example.com"));
+        Assert.Single(emailSender.SentEmails);
+
+        // Even for a non-existent email, repeating within 1 minute triggers the same cooldown (no enumeration).
+        await Assert.ThrowsAsync<RateLimitExceededException>(() =>
+            sut.ResendConfirmationEmailAsync(new ResendConfirmationRequest("missing@example.com")));
+    }
+
+    [Fact]
+    public async Task GoogleLoginAsync_CreatesNewUser_LinksConfirmedUser_AndBlocksUnconfirmedOrUnverified()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        var emailSender = new CapturingEmailSenderService();
+        var googleValidator = new StubGoogleTokenValidator();
+
+        dbContext.Users.AddRange(
+            new User
+            {
+                Email = "confirmed@example.com",
+                DisplayName = "Confirmed User",
+                PasswordHash = "hash",
+                EmailConfirmedAt = DateTimeOffset.UtcNow
+            },
+            new User
+            {
+                Email = "pending@example.com",
+                DisplayName = "Pending User",
+                PasswordHash = "hash",
+                EmailConfirmedAt = null
+            });
+        await dbContext.SaveChangesAsync();
+
+        var sut = new AuthService(
+            dbContext,
+            new PasswordHasherService(),
+            CreateJwtTokenService(),
+            emailSender,
+            new MemoryCache(new MemoryCacheOptions()),
+            googleTokenValidator: googleValidator);
+
+        // 1. New Google user
+        googleValidator.NextPayload = new GoogleUserPayload("newgoogle@example.com", true, "Google User", null);
+        var createdAuth = await sut.GoogleLoginAsync(new GoogleLoginRequest("token-new"));
+        Assert.Equal("newgoogle@example.com", createdAuth.Email);
+        var newUser = await dbContext.Users.SingleAsync(u => u.Email == "newgoogle@example.com");
+        Assert.Null(newUser.PasswordHash);
+        Assert.NotNull(newUser.EmailConfirmedAt);
+
+        // 2. Existing confirmed user links cleanly
+        googleValidator.NextPayload = new GoogleUserPayload("confirmed@example.com", true, "Changed Name", null);
+        var linkedAuth = await sut.GoogleLoginAsync(new GoogleLoginRequest("token-confirmed"));
+        Assert.Equal("Confirmed User", linkedAuth.DisplayName);
+
+        // 3. Existing unconfirmed user is rejected with EmailNotConfirmedException
+        googleValidator.NextPayload = new GoogleUserPayload("pending@example.com", true, "Pending User", null);
+        await Assert.ThrowsAsync<EmailNotConfirmedException>(() =>
+            sut.GoogleLoginAsync(new GoogleLoginRequest("token-pending")));
+
+        // 4. Unverified Google email is rejected
+        googleValidator.NextPayload = new GoogleUserPayload("unverified@example.com", false, "Unverified", null);
+        await Assert.ThrowsAsync<AuthException>(() =>
+            sut.GoogleLoginAsync(new GoogleLoginRequest("token-unverified")));
+    }
+
+    private sealed class StubGoogleTokenValidator : IGoogleTokenValidator
+    {
+        public GoogleUserPayload NextPayload { get; set; } = new("user@example.com", true, "User", null);
+
+        public Task<GoogleUserPayload> ValidateIdTokenAsync(string idToken, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(NextPayload);
+        }
+    }
+
     private sealed class CapturingEmailSenderService : IEmailSenderService
     {
         public List<(string Recipient, string Subject, string HtmlBody)> SentEmails { get; } = [];
