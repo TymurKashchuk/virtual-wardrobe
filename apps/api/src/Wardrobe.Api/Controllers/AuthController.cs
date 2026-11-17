@@ -1,4 +1,5 @@
 using FluentValidation;
+using FluentValidation.Results;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -15,6 +16,8 @@ public class AuthController : ControllerBase
     private readonly IAuthService _authService;
     private readonly IValidator<RegisterRequest> _registerValidator;
     private readonly IValidator<LoginRequest> _loginValidator;
+    private readonly IValidator<GoogleLoginRequest> _googleLoginValidator;
+    private readonly IValidator<ResendConfirmationRequest> _resendValidator;
     private readonly ICurrentUserService _currentUserService;
     private readonly IWebHostEnvironment _environment;
 
@@ -22,12 +25,16 @@ public class AuthController : ControllerBase
         IAuthService authService,
         IValidator<RegisterRequest> registerValidator,
         IValidator<LoginRequest> loginValidator,
+        IValidator<GoogleLoginRequest> googleLoginValidator,
+        IValidator<ResendConfirmationRequest> resendValidator,
         ICurrentUserService currentUserService,
         IWebHostEnvironment environment)
     {
         _authService = authService;
         _registerValidator = registerValidator;
         _loginValidator = loginValidator;
+        _googleLoginValidator = googleLoginValidator;
+        _resendValidator = resendValidator;
         _currentUserService = currentUserService;
         _environment = environment;
     }
@@ -41,11 +48,7 @@ public class AuthController : ControllerBase
         var validationResult = await _registerValidator.ValidateAsync(request, cancellationToken);
         if (!validationResult.IsValid)
         {
-            var errors = validationResult.Errors
-                .GroupBy(e => e.PropertyName)
-                .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
-
-            return BadRequest(new { errors });
+            return BadRequest(new { errors = ToValidationErrors(validationResult) });
         }
 
         try
@@ -81,6 +84,33 @@ public class AuthController : ControllerBase
         }
     }
 
+    [HttpPost("resend-confirmation")]
+    [EnableRateLimiting("auth-strict")]
+    public async Task<IActionResult> ResendConfirmation(
+        [FromBody] ResendConfirmationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validationResult = await _resendValidator.ValidateAsync(request, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(new { errors = ToValidationErrors(validationResult) });
+        }
+
+        try
+        {
+            await _authService.ResendConfirmationEmailAsync(request, cancellationToken);
+            return Ok(new
+            {
+                message = "If an account with this email exists and is not yet confirmed, a confirmation email has been sent."
+            });
+        }
+        catch (RateLimitExceededException ex)
+        {
+            Response.Headers.RetryAfter = "60";
+            return StatusCode(StatusCodes.Status429TooManyRequests, new { message = ex.Message });
+        }
+    }
+
     [HttpPost("login")]
     [EnableRateLimiting("auth-strict")]
     public async Task<IActionResult> Login(
@@ -90,16 +120,52 @@ public class AuthController : ControllerBase
         var validationResult = await _loginValidator.ValidateAsync(request, cancellationToken);
         if (!validationResult.IsValid)
         {
-            var errors = validationResult.Errors
-                .GroupBy(e => e.PropertyName)
-                .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
-
-            return BadRequest(new { errors });
+            return BadRequest(new { errors = ToValidationErrors(validationResult) });
         }
 
         try
         {
             var response = await _authService.LoginAsync(request, cancellationToken);
+            SetRefreshTokenCookie(response.RefreshToken);
+
+            return Ok(new
+            {
+                response.AccessToken,
+                response.RefreshToken,
+                response.UserId,
+                response.Email,
+                response.DisplayName
+            });
+        }
+        catch (EmailNotConfirmedException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                error = "email_not_confirmed",
+                message = ex.Message
+            });
+        }
+        catch (AuthException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("google")]
+    [EnableRateLimiting("auth-strict")]
+    public async Task<IActionResult> GoogleLogin(
+        [FromBody] GoogleLoginRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validationResult = await _googleLoginValidator.ValidateAsync(request, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(new { errors = ToValidationErrors(validationResult) });
+        }
+
+        try
+        {
+            var response = await _authService.GoogleLoginAsync(request, cancellationToken);
             SetRefreshTokenCookie(response.RefreshToken);
 
             return Ok(new
@@ -230,6 +296,13 @@ public class AuthController : ControllerBase
             Path = "/api/v1/auth",
             Expires = expires
         };
+    }
+
+    private static Dictionary<string, string[]> ToValidationErrors(ValidationResult validationResult)
+    {
+        return validationResult.Errors
+            .GroupBy(e => e.PropertyName)
+            .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
     }
 }
 

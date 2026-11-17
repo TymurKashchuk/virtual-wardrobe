@@ -4,6 +4,7 @@ using Wardrobe.Application.Auth.Services;
 using Wardrobe.Application.Common.Interfaces;
 using Wardrobe.Application.Items.Services;
 using Wardrobe.Application.Outfits.Services;
+using Wardrobe.Application.Profile.Services;
 
 namespace Wardrobe.Application;
 
@@ -15,6 +16,7 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IItemService, ItemService>();
         services.AddScoped<IOutfitService, OutfitService>();
+        services.AddScoped<IProfileService, ProfileService>();
 
         return services;
     }
