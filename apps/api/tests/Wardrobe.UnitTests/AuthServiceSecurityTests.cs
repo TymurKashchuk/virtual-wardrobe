@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Wardrobe.Application.Auth.Models;
 using Wardrobe.Application.Auth.Services;
 using Wardrobe.Application.Common.Exceptions;
 using Wardrobe.Application.Common.Interfaces;
+using Wardrobe.Application.Common.Options;
 using Wardrobe.Domain.Entities;
 using Wardrobe.Infrastructure.Persistence;
 using Wardrobe.Infrastructure.Services;
@@ -38,7 +40,7 @@ public class AuthServiceSecurityTests
     }
 
     [Fact]
-    public async Task RegisterAsync_HtmlEncodesDisplayNameInEmailBody()
+    public async Task RegisterAsync_HtmlEncodesDisplayNameAndIncludesConfirmationLinkInEmailBody()
     {
         await using var dbContext = CreateInMemoryDbContext();
         var emailSender = new CapturingEmailSenderService();
@@ -46,7 +48,8 @@ public class AuthServiceSecurityTests
             dbContext,
             new PasswordHasherService(),
             CreateJwtTokenService(),
-            emailSender);
+            emailSender,
+            Options.Create(new AppOptions { FrontendBaseUrl = "https://wardrobe.example.com/" }));
 
         await sut.RegisterAsync(new RegisterRequest(
             "attacker@example.com",
@@ -57,6 +60,7 @@ public class AuthServiceSecurityTests
         var body = emailSender.SentEmails[0].HtmlBody;
         Assert.DoesNotContain("<script>", body);
         Assert.Contains("&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;", body);
+        Assert.Contains("https://wardrobe.example.com/confirm-email?token=", body);
     }
 
     [Fact]

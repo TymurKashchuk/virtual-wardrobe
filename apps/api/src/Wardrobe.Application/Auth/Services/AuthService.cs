@@ -1,8 +1,10 @@
 using System.Net;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Wardrobe.Application.Auth.Models;
 using Wardrobe.Application.Common.Exceptions;
 using Wardrobe.Application.Common.Interfaces;
+using Wardrobe.Application.Common.Options;
 using Wardrobe.Domain.Entities;
 using Wardrobe.Domain.Enums;
 
@@ -14,17 +16,20 @@ public class AuthService : IAuthService
     private readonly IPasswordHasherService _passwordHasherService;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IEmailSenderService _emailSenderService;
+    private readonly AppOptions _appOptions;
 
     public AuthService(
         IWardrobeDbContext dbContext,
         IPasswordHasherService passwordHasherService,
         IJwtTokenService jwtTokenService,
-        IEmailSenderService emailSenderService)
+        IEmailSenderService emailSenderService,
+        IOptions<AppOptions>? appOptions = null)
     {
         _dbContext = dbContext;
         _passwordHasherService = passwordHasherService;
         _jwtTokenService = jwtTokenService;
         _emailSenderService = emailSenderService;
+        _appOptions = appOptions?.Value ?? new AppOptions();
     }
 
     public async Task<RegisterResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default)
@@ -55,30 +60,43 @@ public class AuthService : IAuthService
         _dbContext.Users.Add(user);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        var confirmationToken = _jwtTokenService.GenerateEmailConfirmationToken(user);
-        var safeDisplayName = WebUtility.HtmlEncode(user.DisplayName);
-
-        var emailSubject = "Підтвердження реєстрації у Virtual Wardrobe";
-        var emailBody = $"""
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h2 style="color: #333;">Ласкаво просимо до Virtual Wardrobe!</h2>
-                <p>Привіт, <strong>{safeDisplayName}</strong>!</p>
-                <p>Дякуємо за реєстрацію. Будь ласка, підтвердіть вашу адресу електронної пошти.</p>
-                <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 15px; margin: 20px 0;">
-                    <p style="margin: 0 0 10px 0; font-weight: bold;">Ваш одноразовий токен підтвердження (діє 24 години):</p>
-                    <code style="word-break: break-all; color: #0d6efd; font-size: 14px;">{confirmationToken}</code>
-                </div>
-                <p style="color: #6c757d; font-size: 13px;">Якщо ви не створювали акаунт у Virtual Wardrobe, просто проігноруйте цей лист.</p>
-            </div>
-            """;
-
-        await _emailSenderService.SendEmailAsync(user.Email, emailSubject, emailBody, cancellationToken);
+        await SendConfirmationEmailAsync(user, cancellationToken);
 
         return new RegisterResponse(
             user.Id, 
             user.Email, 
             user.DisplayName, 
             "Registration successful. Please check your email to confirm your account.");
+    }
+
+    private async Task SendConfirmationEmailAsync(User user, CancellationToken cancellationToken)
+    {
+        var confirmationToken = _jwtTokenService.GenerateEmailConfirmationToken(user);
+        var safeDisplayName = WebUtility.HtmlEncode(user.DisplayName);
+        var baseUrl = _appOptions.FrontendBaseUrl.TrimEnd('/');
+        var confirmationUrl = $"{baseUrl}/confirm-email?token={Uri.EscapeDataString(confirmationToken)}";
+        var safeConfirmationUrl = WebUtility.HtmlEncode(confirmationUrl);
+
+        var emailSubject = "Підтвердження реєстрації у Virtual Wardrobe";
+        var emailBody = $"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <h2 style="color: #333;">Ласкаво просимо до Virtual Wardrobe!</h2>
+                <p>Привіт, <strong>{safeDisplayName}</strong>!</p>
+                <p>Дякуємо за реєстрацію. Натисніть кнопку нижче, щоб підтвердити вашу адресу електронної пошти (посилання діє 24 години):</p>
+                <p style="margin: 24px 0;">
+                    <a href="{safeConfirmationUrl}" style="background-color: #0f172a; color: #ffffff; text-decoration: none; padding: 12px 20px; border-radius: 8px; display: inline-block; font-weight: bold;">
+                        Підтвердити email
+                    </a>
+                </p>
+                <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 15px; margin: 20px 0;">
+                    <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: bold;">Якщо кнопка не працює, використайте токен:</p>
+                    <code style="word-break: break-all; color: #0d6efd; font-size: 13px;">{confirmationToken}</code>
+                </div>
+                <p style="color: #6c757d; font-size: 13px;">Якщо ви не створювали акаунт у Virtual Wardrobe, просто проігноруйте цей лист.</p>
+            </div>
+            """;
+
+        await _emailSenderService.SendEmailAsync(user.Email, emailSubject, emailBody, cancellationToken);
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
