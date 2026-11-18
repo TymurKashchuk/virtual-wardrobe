@@ -12,6 +12,8 @@ export interface AuthContextValue {
   isInitializing: boolean
   login: (payload: LoginPayload) => Promise<void>
   logout: () => Promise<void>
+  updateDisplayName: (displayName: string) => void
+  resetSession: () => void
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)
