@@ -1,11 +1,13 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
-import { ArrowLeft, Camera, LogOut, Trash2 } from 'lucide-react'
+import { ArrowLeft, Camera, KeyRound, LogOut, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { getAvatarPath } from '../api/profile'
 import { AuthImage } from '../components/AuthImage'
 import { useAuth } from '../context/useAuth'
 import {
+  useChangePassword,
+  useDeleteAccount,
   useDeleteAvatar,
   useProfile,
   useUpdateProfile,
@@ -22,6 +24,8 @@ export function ProfilePage() {
   const updateProfileMutation = useUpdateProfile()
   const uploadAvatarMutation = useUploadAvatar()
   const deleteAvatarMutation = useDeleteAvatar()
+  const changePasswordMutation = useChangePassword()
+  const deleteAccountMutation = useDeleteAccount()
 
   const [nameDraft, setNameDraft] = useState<string | null>(null)
   const [profileMessage, setProfileMessage] = useState<{
@@ -30,6 +34,13 @@ export function ProfilePage() {
   } | null>(null)
   const [avatarError, setAvatarError] = useState<string | null>(null)
   const [avatarVersion, setAvatarVersion] = useState(1)
+
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false)
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null)
 
   const displayNameValue = nameDraft ?? profile?.displayName ?? ''
   const initialLetter = (profile?.displayName?.[0] ?? profile?.email?.[0] ?? '?').toUpperCase()
@@ -88,6 +99,33 @@ export function ProfilePage() {
         type: 'error',
         text: err instanceof ApiError ? err.message : 'Не вдалося оновити профіль.',
       })
+    }
+  }
+
+  const handlePasswordSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setPasswordError(null)
+
+    try {
+      await changePasswordMutation.mutateAsync({
+        currentPassword: profile?.hasPassword ? currentPassword : undefined,
+        newPassword,
+      })
+    } catch (err) {
+      setPasswordError(
+        err instanceof ApiError ? err.message : 'Не вдалося змінити пароль.',
+      )
+    }
+  }
+
+  const handleDeleteAccount = async () => {
+    setDeleteAccountError(null)
+    try {
+      await deleteAccountMutation.mutateAsync()
+    } catch (err) {
+      setDeleteAccountError(
+        err instanceof ApiError ? err.message : 'Не вдалося видалити акаунт.',
+      )
     }
   }
 
@@ -231,6 +269,126 @@ export function ProfilePage() {
                 {updateProfileMutation.isPending ? 'Зберігаємо...' : 'Зберегти зміни'}
               </button>
             </form>
+          </section>
+        )}
+
+        {profile && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+            <div className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4 text-slate-500" />
+              <h2 className="text-sm font-bold text-slate-900">
+                {profile.hasPassword ? 'Зміна пароля' : 'Встановлення пароля'}
+              </h2>
+            </div>
+
+            {!profile.hasPassword && (
+              <p className="text-xs text-slate-500">
+                Ви зареєструвалися через Google. Задайте пароль, щоб також входити за email.
+              </p>
+            )}
+
+            <form onSubmit={handlePasswordSubmit} className="space-y-3">
+              {profile.hasPassword && (
+                <div>
+                  <label htmlFor="current-password" className="block text-xs font-medium text-slate-700">
+                    Поточний пароль
+                  </label>
+                  <input
+                    id="current-password"
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-900 focus:outline-none"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="new-password" className="block text-xs font-medium text-slate-700">
+                  Новий пароль
+                </label>
+                <input
+                  id="new-password"
+                  type="password"
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Мін. 8 символів, літери та цифри"
+                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-slate-900 focus:outline-none"
+                />
+              </div>
+
+              {passwordError && (
+                <p className="text-xs text-red-600">{passwordError}</p>
+              )}
+
+              <p className="text-[11px] text-slate-500">
+                Після зміни пароля всі активні сесії буде завершено.
+              </p>
+
+              <button
+                type="submit"
+                disabled={changePasswordMutation.isPending}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                {changePasswordMutation.isPending
+                  ? 'Оновлюємо...'
+                  : profile.hasPassword
+                    ? 'Змінити пароль'
+                    : 'Встановити пароль'}
+              </button>
+            </form>
+          </section>
+        )}
+
+        {profile && (
+          <section className="rounded-2xl border border-red-200 bg-white p-5 shadow-xs space-y-3">
+            <h2 className="text-sm font-bold text-red-700">Видалення акаунта</h2>
+            <p className="text-xs text-slate-600">
+              Акаунт, усі речі, образи та завантажені фото будуть видалені безповоротно.
+            </p>
+
+            {deleteAccountError && (
+              <p className="text-xs text-red-600">{deleteAccountError}</p>
+            )}
+
+            {!confirmDeleteAccount ? (
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteAccount(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 px-3.5 py-2 text-xs font-medium text-red-600 hover:bg-red-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Видалити акаунт
+              </button>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-red-50 p-3">
+                <span className="text-xs font-medium text-red-800">
+                  Ви впевнені? Цю дію не можна скасувати.
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteAccount(false)}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
+                  >
+                    Скасувати
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deleteAccountMutation.isPending}
+                    onClick={() => void handleDeleteAccount()}
+                    className="rounded-lg bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {deleteAccountMutation.isPending ? 'Видалення...' : 'Підтвердити'}
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
         )}
       </main>
