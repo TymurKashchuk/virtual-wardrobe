@@ -89,6 +89,23 @@ export interface ItemFilterParams {
   pageSize?: number
 }
 
+export const UserRole = {
+  User: 1,
+  Admin: 2,
+} as const
+
+export type UserRole = (typeof UserRole)[keyof typeof UserRole]
+
+export interface UserProfileDto {
+  id: string
+  email: string
+  displayName: string
+  hasAvatar: boolean
+  hasPassword: boolean
+  role: UserRole
+  createdAt: string
+}
+
 export interface ApiErrorPayload {
   message?: string
   error?: string

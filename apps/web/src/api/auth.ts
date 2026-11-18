@@ -43,6 +43,14 @@ export async function confirmEmail(token: string): Promise<{ message: string }> 
   })
 }
 
+export async function resendConfirmation(email: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>('/api/v1/auth/resend-confirmation', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+    skipAuthRefresh: true,
+  })
+}
+
 export async function restoreSession(): Promise<AuthResponse | null> {
   return refreshSessionSingleFlight()
 }
