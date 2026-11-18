@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { LogOut, Plus, RotateCcw, Search, Shirt } from 'lucide-react'
+import { LogOut, Plus, RotateCcw, Search, Shirt, User } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import type { ItemDto } from '../api/types'
 import { AddItemModal } from '../components/AddItemModal'
 import { ItemCard } from '../components/ItemCard'
@@ -88,6 +89,13 @@ export function WardrobePage() {
               <Plus className="h-3.5 w-3.5" />
               Додати річ
             </button>
+            <Link
+              to="/profile"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+            >
+              <User className="h-3.5 w-3.5" />
+              Профіль
+            </Link>
             <button
               type="button"
               onClick={() => void logout()}

@@ -50,15 +50,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const logout = useCallback(async () => {
-    await authApi.logout()
+  const resetSession = useCallback(() => {
     setUser(null)
     queryClient.clear()
   }, [queryClient])
 
+  const logout = useCallback(async () => {
+    await authApi.logout()
+    resetSession()
+  }, [resetSession])
+
+  const updateDisplayName = useCallback((displayName: string) => {
+    setUser((prev) => (prev ? { ...prev, displayName } : null))
+  }, [])
+
   const value = useMemo(
-    () => ({ user, isInitializing, login, logout }),
-    [user, isInitializing, login, logout],
+    () => ({
+      user,
+      isInitializing,
+      login,
+      logout,
+      updateDisplayName,
+      resetSession,
+    }),
+    [user, isInitializing, login, logout, updateDisplayName, resetSession],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -83,6 +83,7 @@ export function LoginPage() {
               {needsConfirmation && (
                 <Link
                   to="/confirm-email"
+                  state={{ email }}
                   className="mt-1.5 inline-block font-semibold underline hover:text-red-900"
                 >
                   Перейти до підтвердження email

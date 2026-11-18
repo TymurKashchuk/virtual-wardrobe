@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import * as authApi from '../api/auth'
 import { ApiError } from '../api/client'
+import { ResendConfirmationBox } from '../components/ResendConfirmationBox'
 
 export function RegisterPage() {
   const [displayName, setDisplayName] = useState('')
@@ -53,10 +54,18 @@ export function RegisterPage() {
           </p>
           <Link
             to="/confirm-email"
+            state={{ email: registeredEmail }}
             className="mt-5 inline-block w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
           >
             Ввести токен підтвердження
           </Link>
+
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <ResendConfirmationBox
+              fixedEmail={registeredEmail}
+              initialCooldownSeconds={60}
+            />
+          </div>
         </div>
       </main>
     )
