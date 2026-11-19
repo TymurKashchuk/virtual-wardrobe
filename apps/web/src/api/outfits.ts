@@ -5,6 +5,7 @@ import type {
   OutfitFilterParams,
   OutfitSummaryDto,
   PagedResult,
+  ToggleFavoriteResponse,
   UpdateOutfitRequest,
 } from './types'
 
@@ -59,5 +60,17 @@ export function updateOutfit(
 export function deleteOutfit(id: string): Promise<void> {
   return apiFetch<void>(`/api/v1/outfits/${id}`, {
     method: 'DELETE',
+  })
+}
+
+export function duplicateOutfit(id: string): Promise<OutfitDto> {
+  return apiFetch<OutfitDto>(`/api/v1/outfits/${id}/duplicate`, {
+    method: 'POST',
+  })
+}
+
+export function toggleOutfitFavorite(id: string): Promise<ToggleFavoriteResponse> {
+  return apiFetch<ToggleFavoriteResponse>(`/api/v1/outfits/${id}/favorite`, {
+    method: 'POST',
   })
 }
