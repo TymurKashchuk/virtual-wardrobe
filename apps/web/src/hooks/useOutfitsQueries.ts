@@ -1,6 +1,21 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { getOutfit, getOutfits } from '../api/outfits'
-import type { OutfitFilterParams } from '../api/types'
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
+import {
+  createOutfit,
+  deleteOutfit,
+  getOutfit,
+  getOutfits,
+  updateOutfit,
+} from '../api/outfits'
+import type {
+  CreateOutfitRequest,
+  OutfitFilterParams,
+  UpdateOutfitRequest,
+} from '../api/types'
 
 const OUTFITS_PAGE_SIZE = 24
 
@@ -34,5 +49,47 @@ export function useOutfit(id: string | undefined) {
     queryKey: outfitKeys.detail(id ?? ''),
     queryFn: () => getOutfit(id!),
     enabled: Boolean(id),
+  })
+}
+
+export function useCreateOutfit() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: CreateOutfitRequest) => createOutfit(payload),
+    onSuccess: (created) => {
+      queryClient.setQueryData(outfitKeys.detail(created.id), created)
+      void queryClient.invalidateQueries({ queryKey: outfitKeys.lists() })
+    },
+  })
+}
+
+export interface UpdateOutfitVariables {
+  id: string
+  payload: UpdateOutfitRequest
+}
+
+export function useUpdateOutfit() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, payload }: UpdateOutfitVariables) =>
+      updateOutfit(id, payload),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(outfitKeys.detail(updated.id), updated)
+      void queryClient.invalidateQueries({ queryKey: outfitKeys.lists() })
+    },
+  })
+}
+
+export function useDeleteOutfit() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => deleteOutfit(id),
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: outfitKeys.detail(id) })
+      void queryClient.invalidateQueries({ queryKey: outfitKeys.lists() })
+    },
   })
 }
