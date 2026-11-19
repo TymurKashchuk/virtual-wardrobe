@@ -7,12 +7,15 @@ import {
 import {
   createOutfit,
   deleteOutfit,
+  duplicateOutfit,
   getOutfit,
   getOutfits,
+  toggleOutfitFavorite,
   updateOutfit,
 } from '../api/outfits'
 import type {
   CreateOutfitRequest,
+  OutfitDto,
   OutfitFilterParams,
   UpdateOutfitRequest,
 } from '../api/types'
@@ -89,6 +92,33 @@ export function useDeleteOutfit() {
     mutationFn: (id: string) => deleteOutfit(id),
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: outfitKeys.detail(id) })
+      void queryClient.invalidateQueries({ queryKey: outfitKeys.lists() })
+    },
+  })
+}
+
+export function useDuplicateOutfit() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => duplicateOutfit(id),
+    onSuccess: (duplicated) => {
+      queryClient.setQueryData(outfitKeys.detail(duplicated.id), duplicated)
+      void queryClient.invalidateQueries({ queryKey: outfitKeys.lists() })
+    },
+  })
+}
+
+export function useToggleOutfitFavorite() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => toggleOutfitFavorite(id),
+    onSuccess: (result, id) => {
+      queryClient.setQueryData<OutfitDto>(
+        outfitKeys.detail(id),
+        (prev) => (prev ? { ...prev, isFavorite: result.isFavorite } : prev),
+      )
       void queryClient.invalidateQueries({ queryKey: outfitKeys.lists() })
     },
   })
