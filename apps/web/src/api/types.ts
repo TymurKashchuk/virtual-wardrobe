@@ -158,3 +158,30 @@ export interface OutfitDto {
   createdAt: string
   updatedAt: string
 }
+
+export interface OutfitFilterParams {
+  search?: string
+  isFavorite?: boolean
+  style?: ClothingStyle
+  page?: number
+  pageSize?: number
+}
+
+export interface CreateOutfitRequest {
+  name: string
+  itemIds: string[]
+  style?: ClothingStyle | null
+  notes?: string | null
+  source?: OutfitSource
+}
+
+export interface UpdateOutfitRequest {
+  name: string
+  itemIds: string[]
+  style?: ClothingStyle | null
+  notes?: string | null
+}
+
+export interface ToggleFavoriteResponse {
+  isFavorite: boolean
+}
