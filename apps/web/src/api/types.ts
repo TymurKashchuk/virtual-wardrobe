@@ -111,3 +111,77 @@ export interface ApiErrorPayload {
   error?: string
   errors?: Record<string, string[]>
 }
+
+export const OutfitSource = {
+  Manual: 1,
+  Recommendation: 2,
+} as const
+
+export type OutfitSource = (typeof OutfitSource)[keyof typeof OutfitSource]
+
+export const OUTFIT_SOURCE_LABELS: Record<OutfitSource, string> = {
+  [OutfitSource.Manual]: 'Створено вручну',
+  [OutfitSource.Recommendation]: 'Рекомендація',
+}
+
+export interface OutfitItemDto {
+  itemId: string
+  name: string
+  categoryId: number
+  categoryCode: string
+  categoryNameUk: string
+  thumbKey: string | null
+  position: number
+  primaryColorHex: string | null
+}
+
+export interface OutfitSummaryDto {
+  id: string
+  name: string
+  style: ClothingStyle | null
+  isFavorite: boolean
+  source: OutfitSource
+  itemsCount: number
+  itemThumbKeys: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface OutfitDto {
+  id: string
+  name: string
+  style: ClothingStyle | null
+  notes: string | null
+  isFavorite: boolean
+  source: OutfitSource
+  items: OutfitItemDto[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface OutfitFilterParams {
+  search?: string
+  isFavorite?: boolean
+  style?: ClothingStyle
+  page?: number
+  pageSize?: number
+}
+
+export interface CreateOutfitRequest {
+  name: string
+  itemIds: string[]
+  style?: ClothingStyle | null
+  notes?: string | null
+  source?: OutfitSource
+}
+
+export interface UpdateOutfitRequest {
+  name: string
+  itemIds: string[]
+  style?: ClothingStyle | null
+  notes?: string | null
+}
+
+export interface ToggleFavoriteResponse {
+  isFavorite: boolean
+}
