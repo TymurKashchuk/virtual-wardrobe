@@ -1,9 +1,11 @@
 import { apiFetch } from './client'
 import type {
+  CreateOutfitRequest,
   OutfitDto,
   OutfitFilterParams,
   OutfitSummaryDto,
   PagedResult,
+  UpdateOutfitRequest,
 } from './types'
 
 export function getOutfits(
@@ -35,4 +37,27 @@ export function getOutfits(
 
 export function getOutfit(id: string): Promise<OutfitDto> {
   return apiFetch<OutfitDto>(`/api/v1/outfits/${id}`)
+}
+
+export function createOutfit(payload: CreateOutfitRequest): Promise<OutfitDto> {
+  return apiFetch<OutfitDto>('/api/v1/outfits', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateOutfit(
+  id: string,
+  payload: UpdateOutfitRequest,
+): Promise<OutfitDto> {
+  return apiFetch<OutfitDto>(`/api/v1/outfits/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteOutfit(id: string): Promise<void> {
+  return apiFetch<void>(`/api/v1/outfits/${id}`, {
+    method: 'DELETE',
+  })
 }
