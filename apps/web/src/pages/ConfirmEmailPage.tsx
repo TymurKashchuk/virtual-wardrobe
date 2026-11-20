@@ -7,7 +7,7 @@ import { ResendConfirmationBox } from '../components/ResendConfirmationBox'
 export function ConfirmEmailPage() {
   const [searchParams] = useSearchParams()
   const location = useLocation()
-  const urlToken = searchParams.get('token')?.trim() ?? ''
+  const urlToken = (searchParams.get('token') ?? '').replace(/\s+/g, '')
   const passedEmail =
     (location.state as { email?: string } | null)?.email ?? ''
 
@@ -54,7 +54,7 @@ export function ConfirmEmailPage() {
     setMessage(null)
 
     try {
-      await authApi.confirmEmail(token.trim())
+      await authApi.confirmEmail(token.replace(/\s+/g, ''))
       setStatus('success')
       setMessage('Email успішно підтверджено! Тепер ви можете увійти.')
     } catch (err) {
