@@ -27,6 +27,8 @@ export function LoginPage() {
         if (err.code === 'email_not_confirmed') {
           setNeedsConfirmation(true)
           setError('Email ще не підтверджено. Перевірте пошту та підтвердьте акаунт.')
+        } else if (err.message === 'Invalid email or password.') {
+          setError('Невірний email або пароль.')
         } else {
           setError(err.message)
         }
