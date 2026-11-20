@@ -9,12 +9,14 @@ export function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [needsConfirmation, setNeedsConfirmation] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
+    setNeedsConfirmation(false)
     setIsSubmitting(true)
 
     try {
@@ -22,7 +24,14 @@ export function RegisterPage() {
       setRegisteredEmail(result.email)
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message)
+        if (err.code === 'email_not_confirmed') {
+          setNeedsConfirmation(true)
+          setError('Акаунт із цим email уже створено, але пошту ще не підтверджено.')
+        } else if (err.message === 'User with this email already exists.') {
+          setError('Користувач із цим email уже зареєстрований.')
+        } else {
+          setError(err.message)
+        }
       } else {
         setError('Не вдалося завершити реєстрацію.')
       }
@@ -65,6 +74,23 @@ export function RegisterPage() {
               fixedEmail={registeredEmail}
               initialCooldownSeconds={60}
             />
+          </div>
+
+          <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
+            <button
+              type="button"
+              onClick={() => {
+                setRegisteredEmail(null)
+                setError(null)
+                setNeedsConfirmation(false)
+              }}
+              className="underline hover:text-slate-800"
+            >
+              Інший email
+            </button>
+            <Link to="/login" className="underline hover:text-slate-800">
+              Назад до входу
+            </Link>
           </div>
         </div>
       </main>
@@ -130,7 +156,16 @@ export function RegisterPage() {
 
           {error && (
             <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700">
-              {error}
+              <p>{error}</p>
+              {needsConfirmation && (
+                <Link
+                  to="/confirm-email"
+                  state={{ email }}
+                  className="mt-1.5 inline-block font-semibold underline hover:text-red-900"
+                >
+                  Перейти до підтвердження або надіслати лист ще раз
+                </Link>
+              )}
             </div>
           )}
 
