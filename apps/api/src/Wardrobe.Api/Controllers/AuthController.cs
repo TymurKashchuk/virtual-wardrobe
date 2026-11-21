@@ -56,6 +56,14 @@ public class AuthController : ControllerBase
             var response = await _authService.RegisterAsync(request, cancellationToken);
             return Ok(response);
         }
+        catch (EmailNotConfirmedException ex)
+        {
+            return Conflict(new
+            {
+                error = "email_not_confirmed",
+                message = ex.Message
+            });
+        }
         catch (AuthException ex)
         {
             return BadRequest(new { message = ex.Message });

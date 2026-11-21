@@ -8,13 +8,67 @@ interface ResendConfirmationBoxProps {
   initialCooldownSeconds?: number
 }
 
+const COOLDOWN_SECONDS = 60
+
+function getCooldownStorageKey(email: string): string {
+  return `resend_confirm_until:${email.trim().toLowerCase()}`
+}
+
+function readStoredCooldownSeconds(email: string): number {
+  const normalized = email.trim().toLowerCase()
+  if (!normalized) {
+    return 0
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(getCooldownStorageKey(normalized))
+    if (!raw) {
+      return 0
+    }
+    const deadlineMs = Number(raw)
+    if (!Number.isFinite(deadlineMs)) {
+      return 0
+    }
+    return Math.max(0, Math.ceil((deadlineMs - Date.now()) / 1000))
+  } catch {
+    return 0
+  }
+}
+
+function writeCooldownDeadline(email: string, seconds: number): void {
+  const normalized = email.trim().toLowerCase()
+  if (!normalized || seconds <= 0) {
+    return
+  }
+
+  try {
+    const deadlineMs = Date.now() + seconds * 1000
+    window.sessionStorage.setItem(
+      getCooldownStorageKey(normalized),
+      String(deadlineMs),
+    )
+  } catch {
+    // Ignore storage quota or privacy-mode errors.
+  }
+}
+
 export function ResendConfirmationBox({
   fixedEmail,
   defaultEmail = '',
   initialCooldownSeconds = 0,
 }: ResendConfirmationBoxProps) {
   const [emailInput, setEmailInput] = useState(defaultEmail)
-  const [secondsLeft, setSecondsLeft] = useState(initialCooldownSeconds)
+  const [secondsLeft, setSecondsLeft] = useState(() => {
+    const initialTarget = fixedEmail ?? defaultEmail
+    const stored = readStoredCooldownSeconds(initialTarget)
+    if (stored > 0) {
+      return stored
+    }
+    if (initialCooldownSeconds > 0 && initialTarget.trim()) {
+      writeCooldownDeadline(initialTarget, initialCooldownSeconds)
+    }
+    return initialCooldownSeconds
+  })
   const [isSending, setIsSending] = useState(false)
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(
     null,
@@ -49,14 +103,16 @@ export function ResendConfirmationBox({
 
     try {
       await authApi.resendConfirmation(targetEmail)
-      setSecondsLeft(60)
+      writeCooldownDeadline(targetEmail, COOLDOWN_SECONDS)
+      setSecondsLeft(COOLDOWN_SECONDS)
       setFeedback({
         type: 'success',
         text: 'Якщо акаунт ще не підтверджено, новий лист надіслано.',
       })
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
-        setSecondsLeft(60)
+        writeCooldownDeadline(targetEmail, COOLDOWN_SECONDS)
+        setSecondsLeft(COOLDOWN_SECONDS)
         setFeedback({
           type: 'error',
           text: 'Зачекайте 1 хвилину перед повторним надсиланням.',

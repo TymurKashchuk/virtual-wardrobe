@@ -44,10 +44,16 @@ public class AuthService : IAuthService
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
 
         var existingUser = await _dbContext.Users
-            .AnyAsync(u => u.Email == normalizedEmail, cancellationToken);
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail, cancellationToken);
 
-        if (existingUser)
+        if (existingUser != null)
         {
+            if (existingUser.EmailConfirmedAt == null)
+            {
+                throw new EmailNotConfirmedException(
+                    "An account with this email already exists and is awaiting email confirmation. Please confirm your email or request a new confirmation link.");
+            }
+
             throw new AuthException("User with this email already exists.");
         }
 

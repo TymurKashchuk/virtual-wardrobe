@@ -239,6 +239,42 @@ public class AuthServiceSecurityTests
             sut.GoogleLoginAsync(new GoogleLoginRequest("token-unverified")));
     }
 
+    [Fact]
+    public async Task RegisterAsync_ExistingUnconfirmedUser_ThrowsEmailNotConfirmedException()
+    {
+        await using var dbContext = CreateInMemoryDbContext();
+        dbContext.Users.AddRange(
+            new User
+            {
+                Email = "pending@example.com",
+                DisplayName = "Pending User",
+                PasswordHash = "hash",
+                EmailConfirmedAt = null
+            },
+            new User
+            {
+                Email = "confirmed@example.com",
+                DisplayName = "Confirmed User",
+                PasswordHash = "hash",
+                EmailConfirmedAt = DateTimeOffset.UtcNow
+            });
+        await dbContext.SaveChangesAsync();
+
+        var sut = new AuthService(
+            dbContext,
+            new PasswordHasherService(),
+            CreateJwtTokenService(),
+            new CapturingEmailSenderService(),
+            new MemoryCache(new MemoryCacheOptions()));
+
+        await Assert.ThrowsAsync<EmailNotConfirmedException>(() =>
+            sut.RegisterAsync(new RegisterRequest("pending@example.com", "Password123", "Pending User")));
+
+        var ex = await Assert.ThrowsAsync<AuthException>(() =>
+            sut.RegisterAsync(new RegisterRequest("confirmed@example.com", "Password123", "Confirmed User")));
+        Assert.Equal("User with this email already exists.", ex.Message);
+    }
+
     private sealed class StubGoogleTokenValidator : IGoogleTokenValidator
     {
         public GoogleUserPayload NextPayload { get; set; } = new("user@example.com", true, "User", null);
