@@ -6,6 +6,7 @@ import type {
   ItemDto,
   ItemFilterParams,
   PagedResult,
+  WardrobeSummaryDto,
 } from './types'
 
 export interface CreateItemPayload {
@@ -16,6 +17,16 @@ export interface CreateItemPayload {
   style: ClothingStyle
   notes?: string
   photo: File
+}
+
+export interface UpdateItemPayload {
+  name: string
+  categoryId: number
+  primaryColorId: number
+  secondaryColorIds?: number[]
+  style: ClothingStyle
+  notes?: string
+  newPhoto?: File
 }
 
 export function getCategories(): Promise<CategoryDto[]> {
@@ -69,6 +80,35 @@ export function createItem(payload: CreateItemPayload): Promise<ItemDto> {
     method: 'POST',
     body: formData,
   })
+}
+
+export function updateItem(
+  id: string,
+  payload: UpdateItemPayload,
+): Promise<ItemDto> {
+  const formData = new FormData()
+  formData.append('name', payload.name)
+  formData.append('categoryId', String(payload.categoryId))
+  formData.append('primaryColorId', String(payload.primaryColorId))
+  payload.secondaryColorIds?.forEach((secId) =>
+    formData.append('secondaryColorIds', String(secId)),
+  )
+  formData.append('style', String(payload.style))
+  if (payload.notes?.trim()) {
+    formData.append('notes', payload.notes.trim())
+  }
+  if (payload.newPhoto) {
+    formData.append('newPhoto', payload.newPhoto)
+  }
+
+  return apiFetch<ItemDto>(`/api/v1/items/${id}`, {
+    method: 'PUT',
+    body: formData,
+  })
+}
+
+export function getWardrobeSummary(): Promise<WardrobeSummaryDto> {
+  return apiFetch<WardrobeSummaryDto>('/api/v1/items/summary')
 }
 
 export function deleteItem(id: string): Promise<void> {
