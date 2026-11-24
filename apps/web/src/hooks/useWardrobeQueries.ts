@@ -10,7 +10,10 @@ import {
   getCategories,
   getColors,
   getItems,
+  getWardrobeSummary,
+  updateItem,
   type CreateItemPayload,
+  type UpdateItemPayload,
 } from '../api/items'
 import type { ItemFilterParams } from '../api/types'
 
@@ -50,6 +53,13 @@ export function useInfiniteItems(filters: ItemsQueryFilters) {
   })
 }
 
+export function useWardrobeSummary() {
+  return useQuery({
+    queryKey: ['items-summary'],
+    queryFn: getWardrobeSummary,
+  })
+}
+
 export function useCreateItem() {
   const queryClient = useQueryClient()
 
@@ -57,6 +67,25 @@ export function useCreateItem() {
     mutationFn: (payload: CreateItemPayload) => createItem(payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['items'] })
+      void queryClient.invalidateQueries({ queryKey: ['items-summary'] })
+    },
+  })
+}
+
+export interface UpdateItemVariables {
+  id: string
+  payload: UpdateItemPayload
+}
+
+export function useUpdateItem() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, payload }: UpdateItemVariables) =>
+      updateItem(id, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['items'] })
+      void queryClient.invalidateQueries({ queryKey: ['items-summary'] })
     },
   })
 }
@@ -68,6 +97,7 @@ export function useDeleteItem() {
     mutationFn: (id: string) => deleteItem(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['items'] })
+      void queryClient.invalidateQueries({ queryKey: ['items-summary'] })
     },
   })
 }

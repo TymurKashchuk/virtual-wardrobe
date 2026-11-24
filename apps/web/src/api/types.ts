@@ -185,3 +185,16 @@ export interface UpdateOutfitRequest {
 export interface ToggleFavoriteResponse {
   isFavorite: boolean
 }
+
+export interface CategorySummaryDto {
+  categoryId: number
+  code: string
+  nameUk: string
+  count: number
+}
+
+export interface WardrobeSummaryDto {
+  totalCount: number
+  maxItemsLimit: number
+  categories: CategorySummaryDto[]
+}

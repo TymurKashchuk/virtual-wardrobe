@@ -5,12 +5,14 @@ import type { ItemDto } from '../api/types'
 import { AddItemModal } from '../components/AddItemModal'
 import { ItemCard } from '../components/ItemCard'
 import { ItemDetailModal } from '../components/ItemDetailModal'
+import { WardrobeSummaryBar } from '../components/WardrobeSummaryBar'
 import { useAuth } from '../context/useAuth'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import {
   useCategories,
   useColors,
   useInfiniteItems,
+  useWardrobeSummary,
 } from '../hooks/useWardrobeQueries'
 
 function toggleId(list: number[], id: number): number[] {
@@ -31,6 +33,7 @@ export function WardrobePage() {
 
   const { data: categories = [] } = useCategories()
   const { data: colors = [] } = useColors()
+  const { data: summary } = useWardrobeSummary()
 
   const filters = useMemo(
     () => ({
@@ -109,6 +112,16 @@ export function WardrobePage() {
       </header>
 
       <main className="mx-auto max-w-5xl space-y-4 px-4 py-5">
+        {summary && (
+          <WardrobeSummaryBar
+            summary={summary}
+            selectedCategoryIds={selectedCategories}
+            onToggleCategory={(catId) =>
+              setSelectedCategories((prev) => toggleId(prev, catId))
+            }
+          />
+        )}
+
         {/* Search and sort bar */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative flex-1">
@@ -292,6 +305,9 @@ export function WardrobePage() {
       {selectedItem && (
         <ItemDetailModal
           item={selectedItem}
+          categories={categories}
+          colors={colors}
+          onUpdated={(updated) => setSelectedItem(updated)}
           onClose={() => setSelectedItem(null)}
         />
       )}
