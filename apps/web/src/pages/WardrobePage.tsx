@@ -292,6 +292,9 @@ export function WardrobePage() {
       {selectedItem && (
         <ItemDetailModal
           item={selectedItem}
+          categories={categories}
+          colors={colors}
+          onUpdated={(updated) => setSelectedItem(updated)}
           onClose={() => setSelectedItem(null)}
         />
       )}
